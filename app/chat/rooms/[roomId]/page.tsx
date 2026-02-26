@@ -71,14 +71,23 @@ export default function RoomChatPage() {
     const touchStartRef = useRef<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const wsUrl = token ? `${process.env.NEXT_PUBLIC_WS_URL}/ws/rooms/${roomId}?token=${token}` : null;
+    const wsBase = getWsBase();
+    const wsUrl = token ? `${wsBase}/ws/rooms/${roomId}?token=${token}` : null;
     const { messages, send, sendJson, setMessages, connected } = useWebSocket(wsUrl);
     const isHost = room?.created_by === user?.id;
 
     const loadRoomData = async () => {
         try {
             const [msgRes, roomRes, onlineRes] = await Promise.all([api.get(`/rooms/${roomId}/messages`), api.get(`/rooms/${roomId}`), api.get(`/rooms/${roomId}/online`)]);
-            setMessages(msgRes.data.map((m: any) => ({ type: "message", ...m, user_nickname: m.user.nickname, user_username: m.user.username })));
+            const rows = Array.isArray(msgRes.data) ? msgRes.data : [];
+            setMessages(
+                rows.map((m: any) => ({
+                    type: m?.type || "message",
+                    ...m,
+                    user_nickname: m?.user?.nickname || m?.user_nickname || m?.user_name || "Unknown",
+                    user_username: m?.user?.username || m?.user_username || "unknown",
+                }))
+            );
             setRoom(roomRes.data);
             setOnlineIds(onlineRes.data.online_user_ids || []);
             setLoadError("");
