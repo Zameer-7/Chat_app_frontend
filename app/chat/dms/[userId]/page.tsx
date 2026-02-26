@@ -220,18 +220,11 @@ export default function DMChatPage() {
                         return (
                             <div key={`${m.id}-${i}`} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row" }}>
                                 <div style={{ ...s.msgCol, alignItems: isMe ? "flex-end" : "flex-start" }}>
-                                    <div style={s.msgMeta}>
-                                        <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
-                                        {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
-                                        {status && <span style={s.seenTag}>{status}</span>}
-                                        <div style={s.msgActions}>
-                                            {!m.is_deleted && !isEditing && <button onClick={() => setReplyingTo({ id: m.id, username: isMe ? user?.username || "" : otherUser.username || "", nickname: isMe ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) })} style={s.actionBtn}><Reply size={12} /></button>}
-                                                {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.actionBtn}><Copy size={12} /></button>}
-                                            {isMe && !m.is_deleted && !isEditing && <button onClick={() => startEdit(m)} style={s.actionBtn}><Edit2 size={12} /></button>}
-                                            {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, false)} style={s.actionBtn}><Trash2 size={12} /></button>}
-                                            {!m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, true)} style={s.actionBtn}>Me</button>}
+                                        <div style={s.msgMeta}>
+                                            <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                                            {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
+                                            {status && <span style={s.seenTag}>{status}</span>}
                                         </div>
-                                    </div>
                                     {isEditing ? (
                                         <div style={s.editWrap}>
                                             <input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus />
@@ -245,9 +238,19 @@ export default function DMChatPage() {
                                             {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
                                             {parsed.body}
                                             <div style={s.reactionRow}>
+                                                {!m.is_deleted && !isEditing && <button onClick={() => setReplyingTo({ id: m.id, username: isMe ? user?.username || "" : otherUser.username || "", nickname: isMe ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) })} style={s.reactionGhost}><Reply size={11} /></button>}
+                                                {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.reactionGhost}><Copy size={11} /></button>}
+                                                {isMe && !m.is_deleted && !isEditing && <button onClick={() => startEdit(m)} style={s.reactionGhost}><Edit2 size={11} /></button>}
+                                                {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, false)} style={s.reactionGhost}><Trash2 size={11} /></button>}
+                                                {!m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, true)} style={s.reactionGhost}>Del me</button>}
                                                 {REACTION_EMOJIS.map((emoji) => (
-                                                    <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji} {Array.isArray(reactions[emoji]) ? reactions[emoji].length : 0}</button>
+                                                    <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>
                                                 ))}
+                                                {Object.entries(reactions).map(([emoji, users]) => {
+                                                    const count = Array.isArray(users) ? users.length : 0;
+                                                    if (count <= 0) return null;
+                                                    return <span key={`count-${emoji}`} style={s.reactionCount}>{emoji} {count}</span>;
+                                                })}
                                                 {!m.is_deleted && <button onClick={() => pin(m.id)} style={s.reactionGhost}><Pin size={11} /></button>}
                                                 {!m.is_deleted && <button onClick={() => forward(m.id)} style={s.reactionGhost}><Forward size={11} /></button>}
                                             </div>
@@ -304,7 +307,8 @@ const s: Record<string, React.CSSProperties> = {
     replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.92)" },
     replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 },
     reactionRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
-    reactionBtn: { border: "1px solid rgba(255,255,255,0.2)", background: "rgba(11,16,34,0.32)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.4rem", fontSize: 11, cursor: "pointer" },
+    reactionBtn: { border: "1px solid rgba(255,255,255,0.15)", background: "rgba(11,16,34,0.2)", color: "#dbe0ff", borderRadius: 999, padding: "0.1rem 0.35rem", fontSize: 11, cursor: "pointer" },
+    reactionCount: { border: "1px solid rgba(255,255,255,0.25)", background: "rgba(11,16,34,0.34)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.38rem", fontSize: 11 },
     reactionGhost: { border: "1px solid rgba(255,255,255,0.15)", background: "rgba(11,16,34,0.2)", color: "#d5dbff", borderRadius: 999, padding: "0.15rem 0.34rem", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" },
     editWrap: { width: "100%", borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(20,26,47,0.75)", padding: 8 },
     editInput: { background: "#12182e", border: "1px solid #6352f0", borderRadius: 10, padding: "0.52rem 0.65rem", color: "#fff" },
