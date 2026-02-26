@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Send, User, Edit2, Trash2, Check, X, Reply, SmilePlus, ArrowLeft } from "lucide-react";
+import { Send, Edit2, Trash2, Check, X, Reply, SmilePlus, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
@@ -150,18 +150,12 @@ export default function DMChatPage() {
                 </div>
                 <div style={s.headerStatus}>
                     <span className="pulse-dot" style={{ ...s.statusDot, background: connected ? "var(--success)" : "var(--danger)", color: connected ? "var(--success)" : "var(--danger)" }} />
-                    <span style={s.statusText}>{connected ? "Connected" : "Reconnecting"}</span>
+                    <span style={s.statusText}>{connected ? "Online" : "Offline"}</span>
                 </div>
             </header>
 
             <div style={s.messageArea} ref={scrollRef}>
                 <div style={s.historyWall}>
-                    <div style={s.welcomeCard}>
-                        <div style={s.welcomeIcon}><User size={24} /></div>
-                        <h1 style={s.welcomeTitle}>Conversation with {otherUser.nickname}</h1>
-                        <p style={s.welcomeSub}>Start chatting in real time.</p>
-                    </div>
-
                     {(messages as any[]).map((m: any, i) => {
                         const isMe = m.sender_id === user?.id;
                         const isEditing = editingId === m.id;
@@ -247,10 +241,6 @@ const s: Record<string, React.CSSProperties> = {
     avatarSmall: { width: 36, height: 36, borderRadius: 12, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff" },
     messageArea: { flex: 1, overflowY: "auto" },
     historyWall: { padding: "1rem", display: "flex", flexDirection: "column", gap: "0.9rem" },
-    welcomeCard: { padding: "1rem", borderRadius: 14, border: "1px solid rgba(140,148,204,0.18)", background: "rgba(18,24,45,0.58)", marginBottom: 8 },
-    welcomeIcon: { width: 40, height: 40, borderRadius: 12, background: "rgba(119,101,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8, color: "#d7dbff" },
-    welcomeTitle: { fontSize: "1rem", fontWeight: 800, marginBottom: 2 },
-    welcomeSub: { color: "var(--text-muted)", fontSize: "0.85rem" },
     msgRow: { display: "flex", gap: 10, maxWidth: "86%" },
     msgCol: { display: "flex", flexDirection: "column", gap: 4 },
     msgMeta: { display: "flex", alignItems: "center", gap: 6, fontSize: "0.74rem" },

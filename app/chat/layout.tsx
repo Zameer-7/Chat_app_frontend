@@ -84,6 +84,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
     useEffect(() => {
         if (!user) return;
+        const lastRef: { current: Record<number, string> } = { current: { ...lastDmAt } };
         const interval = setInterval(async () => {
             try {
                 const res = await api.get("/dms");
@@ -91,7 +92,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                 setDmConversations(conversations);
                 setUnreadCounts((prev) => {
                     const next = { ...prev };
-                    const nextLast = { ...lastDmAt };
+                    const nextLast = { ...lastRef.current };
                     for (const conv of conversations) {
                         const uid = conv?.user?.id;
                         if (!uid || !conv?.last_at) continue;
@@ -113,13 +114,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         }
                         nextLast[uid] = last;
                     }
+                    lastRef.current = nextLast;
                     setLastDmAt(nextLast);
                     return next;
                 });
             } catch {}
-        }, 6000);
+        }, 7000);
         return () => clearInterval(interval);
-    }, [user, activeDmId, lastDmAt]);
+    }, [user, activeDmId]);
 
     useEffect(() => {
         if (!showAddFriend) {
@@ -210,6 +212,9 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         if (!confirm(`Delete ${selectedDmIds.length} selected chat(s)?`)) return;
         try {
             await api.post("/dms/conversations/bulk-delete", selectedDmIds);
+            if (activeDmId && selectedDmIds.includes(activeDmId)) {
+                router.push("/chat");
+            }
             setSelectionMode(false);
             setSelectedDmIds([]);
             loadSidebarData();
