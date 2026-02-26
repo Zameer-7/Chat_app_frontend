@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Settings, LogOut, Plus, Search, UserCheck, Clock, AtSign, Menu, X, Crown, CheckSquare, Trash2 } from "lucide-react";
+import { Settings, LogOut, Plus, Search, UserCheck, Clock, AtSign, Menu, X, Crown, CheckSquare, Trash2, Users, MessageCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 
@@ -30,6 +30,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
     const [lastDmAt, setLastDmAt] = useState<Record<number, string>>({});
     const [toasts, setToasts] = useState<Array<{ id: string; userId?: number; route?: string; title: string; body: string }>>([]);
+    const [activeSidebarTab, setActiveSidebarTab] = useState<"friends" | "chats">("friends");
 
     const roomPath = (room: any) => `/chat/rooms/${room.room_id || room.id}`;
     const activeDmId = pathname.startsWith("/chat/dms/") ? Number(pathname.split("/").pop()) : null;
@@ -252,12 +253,15 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                 </div>
 
                 <div style={styles.sections}>
-                    <div style={styles.sectionLabel}>Friends</div>
+                    <div style={styles.tabRow}>
+                        <button style={{ ...styles.tabBtn, ...(activeSidebarTab === "friends" ? styles.tabBtnActive : {}) }} onClick={() => setActiveSidebarTab("friends")}><Users size={13} /> Friends</button>
+                        <button style={{ ...styles.tabBtn, ...(activeSidebarTab === "chats" ? styles.tabBtnActive : {}) }} onClick={() => setActiveSidebarTab("chats")}><MessageCircle size={13} /> Chats</button>
+                    </div>
                     <div style={styles.actionsRow}>
                         <button onClick={() => setShowAddFriend(true)} style={styles.secondaryBtn}><Search size={14} /> Add Friend</button>
-                        <button onClick={() => { setSelectionMode((v) => !v); setSelectedDmIds([]); }} style={styles.secondaryBtn}><CheckSquare size={14} /> Select</button>
+                        {activeSidebarTab === "chats" && <button onClick={() => { setSelectionMode((v) => !v); setSelectedDmIds([]); }} style={styles.secondaryBtn}><CheckSquare size={14} /> Select</button>}
                     </div>
-                    {selectionMode && (
+                    {activeSidebarTab === "chats" && selectionMode && (
                         <div style={styles.selectionBar}>
                             <span style={styles.selectionText}>{selectedDmIds.length} selected</span>
                             <button onClick={bulkDeleteChats} style={styles.dangerBtn}><Trash2 size={14} /> Delete</button>
@@ -265,7 +269,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         </div>
                     )}
 
-                    {friendRequests.length > 0 && (
+                    {activeSidebarTab === "friends" && friendRequests.length > 0 && (
                         <div style={styles.requests}>
                             <p style={styles.smallTitle}><Clock size={10} /> Pending ({friendRequests.length})</p>
                             {friendRequests.map((req) => (
@@ -277,27 +281,29 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         </div>
                     )}
 
-                    <div style={styles.listWrap}>
-                        {friends.map((f) => {
-                            const conv = dmConversations.find((c) => c.user?.id === f.id);
-                            const active = pathname.includes(`/dms/${f.id}`);
-                            return (
-                                <Link key={f.id} href={`/chat/dms/${f.id}`} style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
-                                    {selectionMode && (
-                                        <input type="checkbox" checked={selectedDmIds.includes(f.id)} onChange={(e) => { e.preventDefault(); toggleSelectDm(f.id); }} style={styles.selectBox} />
-                                    )}
-                                    <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
-                                    <div style={styles.dmInfo}>
-                                        <p style={{ ...styles.dmName, fontWeight: unreadCounts[f.id] ? 800 : 600 }}>{f.nickname}</p>
-                                        <p style={styles.dmLast}>{conv?.is_muted ? "Muted" : conv?.last_message || "Start chatting"}</p>
-                                    </div>
-                                    {!!unreadCounts[f.id] && <span style={styles.unreadBadge}>{unreadCounts[f.id] > 99 ? "99+" : unreadCounts[f.id]}</span>}
-                                    <span style={styles.onlineDot} />
-                                </Link>
-                            );
-                        })}
-                        {dmConversations.map((conv) =>
-                            friendMap.has(conv.user.id) ? null : (
+                    {activeSidebarTab === "friends" && (
+                        <div style={styles.listWrap}>
+                            {friends.map((f) => {
+                                const active = pathname.includes(`/dms/${f.id}`);
+                                const hasUnread = !!unreadCounts[f.id];
+                                return (
+                                    <Link key={f.id} href={`/chat/dms/${f.id}`} style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
+                                        <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
+                                        <div style={styles.dmInfo}>
+                                            <p style={{ ...styles.dmName, fontWeight: hasUnread ? 800 : 600 }}>{f.nickname}</p>
+                                            <p style={styles.dmLast}>@{f.username}</p>
+                                        </div>
+                                        {!!unreadCounts[f.id] && <span style={styles.unreadBadge}>{unreadCounts[f.id] > 99 ? "99+" : unreadCounts[f.id]}</span>}
+                                        <span style={{ ...styles.onlineDot, background: active ? "var(--success)" : "#8b93be", boxShadow: "none" }} />
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {activeSidebarTab === "chats" && (
+                        <div style={styles.listWrap}>
+                            {dmConversations.map((conv) => (
                                 <Link key={conv.user.id} href={`/chat/dms/${conv.user.id}`} style={{ ...styles.navItem, ...(pathname.includes(`/dms/${conv.user.id}`) ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
                                     {selectionMode && (
                                         <input type="checkbox" checked={selectedDmIds.includes(conv.user.id)} onChange={(e) => { e.preventDefault(); toggleSelectDm(conv.user.id); }} style={styles.selectBox} />
@@ -305,13 +311,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                     <div style={styles.dmAvatar}>{conv.user.nickname[0]}</div>
                                     <div style={styles.dmInfo}>
                                         <p style={{ ...styles.dmName, fontWeight: unreadCounts[conv.user.id] ? 800 : 600 }}>{conv.user.nickname}</p>
-                                        <p style={styles.dmLast}>{conv.is_archived ? "[Archived] " : ""}{conv.last_message}</p>
+                                        <p style={styles.dmLast}>{conv.is_archived ? "[Archived] " : ""}{conv.last_message || "Start chatting"}</p>
                                     </div>
                                     {!!unreadCounts[conv.user.id] && <span style={styles.unreadBadge}>{unreadCounts[conv.user.id] > 99 ? "99+" : unreadCounts[conv.user.id]}</span>}
+                                    {!friendMap.has(conv.user.id) && <span style={styles.chatTag}>Chat</span>}
                                 </Link>
-                            )
-                        )}
-                    </div>
+                            ))}
+                        </div>
+                    )}
 
                     <div style={{ ...styles.sectionLabel, marginTop: "1.2rem" }}>Rooms</div>
                     <button onClick={() => setShowCreateRoom(true)} className="btn-primary" style={styles.primaryCta}><Plus size={14} /> Create Room</button>
@@ -416,6 +423,9 @@ const styles: Record<string, React.CSSProperties> = {
     settingsBtn: { color: "var(--text-muted)", border: "1px solid rgba(143,150,210,0.2)", borderRadius: 10, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" },
     sections: { flex: 1, overflowY: "auto", padding: "0.9rem" },
     sectionLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700, marginBottom: 8, padding: "0 0.4rem" },
+    tabRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 },
+    tabBtn: { border: "1px solid rgba(119,101,255,0.28)", background: "rgba(119,101,255,0.08)", color: "#cdd2ff", borderRadius: 10, padding: "0.5rem 0.6rem", fontWeight: 700, fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer" },
+    tabBtnActive: { background: "linear-gradient(135deg, rgba(119,101,255,0.42), rgba(93,76,231,0.32))", color: "#fff", borderColor: "rgba(166,154,255,0.42)" },
     actionsRow: { display: "flex", gap: 8, marginBottom: 10 },
     secondaryBtn: { width: "100%", display: "flex", gap: 6, alignItems: "center", justifyContent: "center", background: "rgba(119,101,255,0.12)", color: "#ccd0ff", border: "1px solid rgba(119,101,255,0.35)", borderRadius: 10, padding: "0.56rem 0.7rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" },
     selectionBar: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
@@ -432,6 +442,7 @@ const styles: Record<string, React.CSSProperties> = {
     dmName: { fontWeight: 600, fontSize: "0.85rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
     dmLast: { fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
     onlineDot: { width: 8, height: 8, borderRadius: 99, background: "var(--success)", boxShadow: "0 0 0 4px rgba(37,213,106,0.15)" },
+    chatTag: { fontSize: 10, color: "#bfc4ff", border: "1px solid rgba(143,150,210,0.35)", borderRadius: 999, padding: "0.12rem 0.36rem" },
     unreadBadge: { minWidth: 18, height: 18, borderRadius: 99, padding: "0 5px", background: "#ef4f6f", color: "#fff", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: "auto" },
     requests: { background: "rgba(119,101,255,0.08)", borderRadius: 12, padding: 9, marginBottom: 10, border: "1px dashed rgba(119,101,255,0.42)" },
     smallTitle: { fontSize: "0.66rem", fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 4, color: "#bfc4ff" },
