@@ -57,7 +57,7 @@ export default function SignupPage() {
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="jafar_dev"
+                                placeholder="john_doe"
                                 required
                             />
                         </div>
@@ -71,7 +71,7 @@ export default function SignupPage() {
                                 type="text"
                                 value={nickname}
                                 onChange={(e) => setNickname(e.target.value)}
-                                placeholder="Jafar"
+                                placeholder="John Doe"
                                 required
                             />
                         </div>
