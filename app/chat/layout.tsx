@@ -7,7 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
-    const { user, logout } = useAuth();
+    const { user, logout, loading } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
     const [rooms, setRooms] = useState<any[]>([]);
@@ -38,6 +38,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     useEffect(() => {
         if (user) loadSidebarData();
     }, [user, pathname]);
+
+    useEffect(() => {
+        if (!loading && !user) {
+            router.replace("/login");
+        }
+    }, [loading, user, router]);
 
     useEffect(() => {
         if (!showAddFriend) {
@@ -104,7 +110,9 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         }
     };
 
-    if (!user) return null;
+    if (loading || !user) {
+        return <div style={styles.bootScreen}>Loading...</div>;
+    }
 
     return (
         <div style={styles.appWrap}>
@@ -254,6 +262,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 }
 
 const styles: Record<string, React.CSSProperties> = {
+    bootScreen: {
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "var(--text-muted)",
+        background: "var(--bg-base)",
+    },
     appWrap: { display: "flex", height: "100vh", overflow: "hidden" },
     sidebar: { width: 280, flexShrink: 0, background: "var(--bg-surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column" },
     sidebarHeader: { padding: "1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" },
