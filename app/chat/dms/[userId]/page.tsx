@@ -11,6 +11,14 @@ const REACTION_EMOJIS = ["\u2764\uFE0F", "\u{1F602}", "\u{1F44D}", "\u{1F525}"];
 
 type ReplyMeta = { id: number; username: string; nickname: string; content: string };
 
+function getWsBase() {
+    const raw = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || "https://chat-app-backend-kmr3.onrender.com";
+    if (raw.startsWith("wss://") || raw.startsWith("ws://")) return raw;
+    if (raw.startsWith("https://")) return raw.replace("https://", "wss://");
+    if (raw.startsWith("http://")) return raw.replace("http://", "ws://");
+    return "wss://chat-app-backend-kmr3.onrender.com";
+}
+
 function parseMessageContent(raw: string) {
     const match = raw.match(REPLY_PREFIX);
     if (!match) return { body: raw, reply: null as ReplyMeta | null, prefix: "" };
@@ -47,20 +55,53 @@ export default function DMChatPage() {
     const scrollRef = useRef<HTMLDivElement>(null);
     const touchStartRef = useRef<number | null>(null);
 
-    const wsUrl = token ? `${process.env.NEXT_PUBLIC_WS_URL}/ws/dms/${userId}?token=${token}` : null;
+    const wsBase = getWsBase();
+    const wsUrl = token ? `${wsBase}/ws/dms/${userId}?token=${token}` : null;
     const { messages, send, sendJson, setMessages, connected } = useWebSocket(wsUrl);
 
     useEffect(() => {
         (async () => {
-            const [dmRes, userRes, blockedRes] = await Promise.all([api.get(`/dms/${userId}`), api.get(`/users/${userId}`), api.get("/users/blocked")]);
-            const base = dmRes.data.map((m: any) => ({ type: "dm", ...m }));
-            setMessages(base);
-            setOtherUser(userRes.data);
-            const rows = Array.isArray(blockedRes.data) ? blockedRes.data : [];
-            setBlockedIds(rows.map((b: any) => Number(b.blocked_id)).filter((n: number) => Number.isFinite(n)));
-            const unseenIds = base.filter((m: any) => m.sender_id === Number(userId) && !m.seen_at).map((m: any) => m.id);
-            if (unseenIds.length) sendJson({ type: "seen", message_ids: unseenIds });
-        })().catch(() => {});
+            try {
+                const [dmRes, userRes, blockedRes] = await Promise.all([
+                    api.get(`/dms/${userId}`),
+                    api.get(`/users/${userId}`),
+                    api.get("/users/blocked")
+                ]);
+
+                const base = Array.isArray(dmRes.data) ? dmRes.data.map((m: any) => ({ type: "dm", ...m })) : [];
+                setMessages(base);
+
+                const fetchedUser = userRes?.data || {};
+                setOtherUser({
+                    nickname: fetchedUser.nickname || fetchedUser.username || "User",
+                    username: fetchedUser.username || "user",
+                    show_online_status: fetchedUser.show_online_status !== false,
+                    ...fetchedUser
+                });
+
+                const rows = Array.isArray(blockedRes.data) ? blockedRes.data : [];
+                setBlockedIds(rows.map((b: any) => Number(b.blocked_id)).filter((n: number) => Number.isFinite(n)));
+
+                const unseenIds = base
+                    .filter((m: any) => m.sender_id === Number(userId) && !m.seen_at)
+                    .map((m: any) => m.id);
+                if (unseenIds.length) sendJson({ type: "seen", message_ids: unseenIds });
+            } catch (err) {
+                console.error("Failed to load DM:", err);
+                try {
+                    const all = await api.get("/friends/all");
+                    const found = (Array.isArray(all.data) ? all.data : []).find((u: any) => Number(u.id) === Number(userId));
+                    if (found) {
+                        setOtherUser({
+                            nickname: found.nickname || found.username || "User",
+                            username: found.username || "user",
+                            show_online_status: found.show_online_status !== false,
+                            ...found
+                        });
+                    }
+                } catch {}
+            }
+        })();
     }, [userId, setMessages, sendJson]);
 
     useEffect(() => {
@@ -192,7 +233,7 @@ export default function DMChatPage() {
             <header style={s.header} className="glass">
                 <div style={s.headerInfo}>
                     <button style={s.toolBtn} onClick={() => router.push("/chat")}><ArrowLeft size={15} /></button>
-                    <div style={s.avatarSmall}>{otherUser.nickname[0].toUpperCase()}</div>
+                    <div style={s.avatarSmall}>{String(otherUser.nickname || otherUser.username || "U")[0].toUpperCase()}</div>
                     <div style={s.nameWrap}>
                         <h2 style={s.roomName}>{otherUser.nickname || "User"}</h2>
                         <span style={s.usernameSmall}>@{otherUser.username || "username"}</span>
