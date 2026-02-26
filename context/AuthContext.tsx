@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import axios from "axios";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://chat-app-backend-kmr3.onrender.com";
+const API_URLS = Array.from(new Set([API_URL, "https://chat-app-backend-kmr3.onrender.com"]));
 const CLOSED_AT_KEY = "app_closed_at";
 const CLOSE_LOGOUT_MS = 5 * 60 * 1000;
 
@@ -23,14 +24,46 @@ function getApiErrorMessage(err: unknown, fallback: string): string {
 
 async function postWithRetry(path: string, payload: unknown, retries = 2) {
     let lastErr: unknown;
-    for (let i = 0; i <= retries; i++) {
+    for (const base of API_URLS) {
+        for (let i = 0; i <= retries; i++) {
+            try {
+                return await axios.post(`${base}${path}`, payload, { timeout: 60000 });
+            } catch (err) {
+                lastErr = err;
+                if (i < retries) {
+                    await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+                }
+            }
+        }
+    }
+    throw lastErr;
+}
+
+async function getWithFallback(path: string, token?: string) {
+    let lastErr: unknown;
+    for (const base of API_URLS) {
         try {
-            return await axios.post(`${API_URL}${path}`, payload, { timeout: 60000 });
+            return await axios.get(`${base}${path}`, {
+                timeout: 60000,
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            });
         } catch (err) {
             lastErr = err;
-            if (i < retries) {
-                await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
-            }
+        }
+    }
+    throw lastErr;
+}
+
+async function patchWithFallback(path: string, payload: unknown, token?: string) {
+    let lastErr: unknown;
+    for (const base of API_URLS) {
+        try {
+            return await axios.patch(`${base}${path}`, payload, {
+                timeout: 60000,
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            });
+        } catch (err) {
+            lastErr = err;
         }
     }
     throw lastErr;
@@ -69,9 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const fetchMe = useCallback(async (tkn: string) => {
         try {
-            const res = await axios.get(`${API_URL}/auth/me`, {
-                headers: { Authorization: `Bearer ${tkn}` },
-            });
+            const res = await getWithFallback("/auth/me", tkn);
             setUser(res.data);
             if (typeof document !== "undefined") {
                 document.documentElement.setAttribute("data-theme", res.data.theme_mode || "dark");
@@ -126,6 +157,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await fetchMe(tkn);
         } catch (err) {
             console.error("Login request failed:", err);
+            if (axios.isAxiosError(err) && err.response?.status === 401) {
+                throw new Error("Incorrect email or password.");
+            }
             throw new Error(getApiErrorMessage(err, "Network issue or server waking up. Please retry in 10-20 seconds."));
         }
     };
@@ -139,6 +173,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await fetchMe(tkn);
         } catch (err) {
             console.error("Signup request failed:", err);
+            if (axios.isAxiosError(err) && err.response?.status === 401) {
+                throw new Error("Incorrect email or password.");
+            }
             throw new Error(getApiErrorMessage(err, "Network issue or server waking up. Please retry in 10-20 seconds."));
         }
     };
@@ -146,9 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const updateProfile = async (data: { nickname?: string, username?: string, show_last_seen?: boolean, show_online_status?: boolean, theme_mode?: "dark" | "light", theme_accent?: "purple" | "blue" | "green" | "rose" }) => {
         if (!token) return;
         try {
-            const res = await axios.patch(`${API_URL}/users/me`, data, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await patchWithFallback("/users/me", data, token);
             setUser(res.data);
             if (typeof document !== "undefined") {
                 document.documentElement.setAttribute("data-theme", res.data.theme_mode || "dark");
