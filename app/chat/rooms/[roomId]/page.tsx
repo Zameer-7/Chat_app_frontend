@@ -139,8 +139,10 @@ export default function RoomChatPage() {
                 <div style={s.historyWall}>
                     <div style={s.welcome}>
                         <div style={s.welcomeIcon}><Hash size={40} /></div>
-                        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#fff' }}>Welcome to #{room.name}!</h1>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>This is the beginning of the **#{room.name}** channel.</p>
+                        <h1 style={{ fontSize: "2rem", fontWeight: 800, color: "#fff" }}>Welcome to #{room.name}!</h1>
+                        <p style={{ color: "var(--text-muted)", fontSize: "1.05rem" }}>
+                            This is the beginning of the #{room.name} channel.
+                        </p>
                     </div>
 
                     {(messages as any[]).map((m: any, i) => {
@@ -202,7 +204,7 @@ export default function RoomChatPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div style={{ ...s.bubble, background: isMe ? 'var(--accent)' : 'var(--bg-elevated)', opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? 'italic' : 'normal' }}>
+                                        <div style={{ ...s.bubble, background: isMe ? s.myBubble.background : s.otherBubble.background, opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? 'italic' : 'normal' }}>
                                             {parsed.reply && (
                                                 <div style={s.replyPreview}>
                                                     <p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p>
@@ -245,41 +247,43 @@ export default function RoomChatPage() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-    container: { display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-base)" },
-    header: { height: 60, flexShrink: 0, padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", background: "var(--bg-surface)" },
+    container: { display: "flex", flexDirection: "column", height: "100%", background: "radial-gradient(circle at 20% 0%, #17132f 0%, #0b0f1f 55%, #090d19 100%)" },
+    header: { height: 64, flexShrink: 0, padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #2f2b5a", background: "linear-gradient(180deg, #161334 0%, #111027 100%)" },
     headerInfo: { display: "flex", alignItems: "center", gap: 10 },
     roomName: { fontWeight: 700, fontSize: "1rem" },
-    badge: { fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" },
+    badge: { fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" },
     headerActions: { display: "flex", alignItems: "center", gap: 12 },
     vDivider: { width: 1, height: 20, background: "var(--border)", margin: "0 4px" },
-    iconBtn: { background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 4, borderRadius: 4 },
+    iconBtn: { background: "#1f1a3e", border: "1px solid #2f2b5a", color: "#c6c8ff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 6, borderRadius: 8 },
     messageArea: { flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" },
     historyWall: { padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" },
-    welcome: { marginBottom: "2rem", borderBottom: "1px solid var(--border)", paddingBottom: "2rem" },
-    welcomeIcon: { width: 64, height: 64, borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem" },
+    welcome: { marginBottom: "2rem", borderBottom: "1px solid #2f2b5a", paddingBottom: "2rem" },
+    welcomeIcon: { width: 64, height: 64, borderRadius: "18px", background: "linear-gradient(145deg, #2a2356 0%, #1b1738 100%)", color: "#d8d9ff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem", border: "1px solid #3a3472" },
     msgRow: { display: "flex", gap: 12, maxWidth: "80%" },
     msgCol: { display: "flex", flexDirection: "column", gap: 4 },
     msgMeta: { display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", height: 20 },
     msgUser: { fontWeight: 700, color: "var(--text-primary)" },
-    msgTime: { color: "var(--text-muted)" },
-    editedTag: { color: "var(--text-muted)", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.04em" },
+    msgTime: { color: "#9ea3d9" },
+    editedTag: { color: "#b9beff", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 },
     msgActions: { display: "flex", gap: 4, opacity: 0.8 },
-    actionBtn: { background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 2 },
-    bubble: { padding: "0.6rem 0.9rem", borderRadius: 12, fontSize: "0.95rem", lineHeight: "1.5", color: "#fff", whiteSpace: "pre-wrap" },
+    actionBtn: { background: "none", border: "none", color: "#aeb3f1", cursor: "pointer", padding: 2 },
+    bubble: { padding: "0.65rem 0.95rem", borderRadius: 14, fontSize: "0.95rem", lineHeight: "1.5", color: "#fff", whiteSpace: "pre-wrap", border: "1px solid #3c3a70", boxShadow: "0 6px 16px rgba(8, 8, 18, 0.35)" },
+    myBubble: { background: "linear-gradient(140deg, #6f63ff 0%, #5d52e9 100%)" },
+    otherBubble: { background: "linear-gradient(140deg, #27224f 0%, #1f1c3f 100%)" },
     replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.5)", paddingLeft: 8, marginBottom: 6, opacity: 0.9 },
     replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.9)" },
     replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.82)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 320 },
-    avatar: { width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 },
+    avatar: { width: 36, height: 36, borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0, border: "1px solid #43407a" },
     systemMsg: { textAlign: "center", fontSize: "0.75rem", color: "var(--text-muted)", margin: "0.5rem 0", textTransform: "uppercase", letterSpacing: "0.05em" },
-    editWrap: { display: "flex", flexDirection: "column", gap: 4, background: "var(--bg-elevated)", padding: 8, borderRadius: 8, width: "100%" },
-    editInput: { background: "var(--bg-base)", border: "1px solid var(--accent)", color: "#fff", padding: "4px 8px", borderRadius: 4, outline: "none" },
+    editWrap: { display: "flex", flexDirection: "column", gap: 4, background: "#221e45", padding: 8, borderRadius: 8, width: "100%", border: "1px solid #3c3a70" },
+    editInput: { background: "#0f1326", border: "1px solid #6f63ff", color: "#fff", padding: "6px 10px", borderRadius: 6, outline: "none" },
     editActions: { display: "flex", justifyContent: "flex-end", gap: 8 },
-    inputArea: { padding: "1.5rem", display: "flex", gap: "0.75rem", background: "var(--bg-base)", flexDirection: "column" },
+    inputArea: { padding: "1.2rem 1.5rem 1.5rem", display: "flex", gap: "0.75rem", background: "linear-gradient(180deg, rgba(18,16,40,0.8) 0%, #0f1324 100%)", borderTop: "1px solid #2f2b5a", flexDirection: "column" },
     inputRow: { display: "flex", gap: "0.75rem" },
-    replyComposer: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, border: "1px solid var(--border)", background: "var(--bg-surface)", borderRadius: 10, padding: "0.6rem 0.75rem" },
+    replyComposer: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, border: "1px solid #3c3a70", background: "#1e1a3d", borderRadius: 10, padding: "0.6rem 0.75rem" },
     replyComposerTitle: { fontSize: "0.75rem", fontWeight: 700, color: "var(--accent)" },
     replyComposerText: { fontSize: "0.8rem", color: "var(--text-muted)", maxWidth: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
     replyCancel: { border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
-    sendBtn: { background: "var(--accent)", color: "#fff", border: "none", borderRadius: 8, width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "transform 0.1s" },
+    sendBtn: { background: "linear-gradient(140deg, #7468ff 0%, #5d52e9 100%)", color: "#fff", border: "1px solid #7d73ff", borderRadius: 10, width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "transform 0.1s" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }
 };
