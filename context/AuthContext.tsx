@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import axios from "axios";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://chat-app-backend-kmr3.onrender.com";
+const CLOSED_AT_KEY = "app_closed_at";
+const CLOSE_LOGOUT_MS = 5 * 60 * 1000;
 
 function getApiErrorMessage(err: unknown, fallback: string): string {
     if (axios.isAxiosError(err)) {
@@ -69,6 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
+        const closedAtRaw = localStorage.getItem(CLOSED_AT_KEY);
+        if (closedAtRaw) {
+            const closedAt = Number(closedAtRaw);
+            if (Number.isFinite(closedAt) && Date.now() - closedAt > CLOSE_LOGOUT_MS) {
+                localStorage.removeItem("token");
+            }
+            localStorage.removeItem(CLOSED_AT_KEY);
+        }
         const stored = localStorage.getItem("token");
         if (stored) {
             setToken(stored);
@@ -77,6 +87,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false);
         }
     }, [fetchMe]);
+
+    useEffect(() => {
+        const markClosed = () => {
+            try {
+                localStorage.setItem(CLOSED_AT_KEY, String(Date.now()));
+            } catch {}
+        };
+        window.addEventListener("pagehide", markClosed);
+        window.addEventListener("beforeunload", markClosed);
+        return () => {
+            window.removeEventListener("pagehide", markClosed);
+            window.removeEventListener("beforeunload", markClosed);
+        };
+    }, []);
 
     const login = async (email: string, password: string) => {
         try {
@@ -123,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = () => {
         localStorage.removeItem("token");
+        localStorage.removeItem(CLOSED_AT_KEY);
         setToken(null);
         setUser(null);
     };
