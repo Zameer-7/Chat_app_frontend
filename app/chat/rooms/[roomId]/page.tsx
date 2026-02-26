@@ -192,7 +192,8 @@ export default function RoomChatPage() {
     const addEmoji = (emoji: string) => setInput((prev) => `${prev}${emoji}`);
     const shareCopy = async () => {
         try {
-            await navigator.clipboard.writeText(room.share_link || window.location.href);
+            const link = `${window.location.origin}/chat/rooms/${room.room_id || room.id}`;
+            await navigator.clipboard.writeText(link);
             setCopied(true);
             setTimeout(() => setCopied(false), 1400);
         } catch {}
@@ -338,7 +339,7 @@ export default function RoomChatPage() {
                 </div>
                 {showEmoji && (
                     <div style={s.emojiWrap}>
-                        {["😀","😂","😍","🥳","🔥","👍","🙏","❤️","😎","🤝","🎉","🚀","😅","😢","🤔","🙌"].map((e) => (
+                        {["\u{1F600}","\u{1F602}","\u{1F60D}","\u{1F973}","\u{1F525}","\u{1F44D}","\u{1F64F}","\u{2764}\u{FE0F}","\u{1F60E}","\u{1F91D}","\u{1F389}","\u{1F680}","\u{1F605}","\u{1F622}","\u{1F914}","\u{1F64C}"].map((e) => (
                             <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>
                         ))}
                     </div>
@@ -407,3 +408,4 @@ const s: Record<string, React.CSSProperties> = {
     emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
 };
+
