@@ -26,6 +26,11 @@ interface User {
     email: string;
     created_at: string;
     last_username_change: string | null;
+    last_seen_at: string | null;
+    show_last_seen: boolean;
+    show_online_status: boolean;
+    theme_mode: "dark" | "light";
+    theme_accent: "purple" | "blue" | "green" | "rose";
 }
 
 interface AuthContextType {
@@ -33,7 +38,7 @@ interface AuthContextType {
     token: string | null;
     login: (email: string, password: string) => Promise<void>;
     signup: (username: string, nickname: string, email: string, password: string) => Promise<void>;
-    updateProfile: (data: { nickname?: string, username?: string }) => Promise<void>;
+    updateProfile: (data: { nickname?: string, username?: string, show_last_seen?: boolean, show_online_status?: boolean, theme_mode?: "dark" | "light", theme_accent?: "purple" | "blue" | "green" | "rose" }) => Promise<void>;
     logout: () => void;
     loading: boolean;
 }
@@ -51,6 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 headers: { Authorization: `Bearer ${tkn}` },
             });
             setUser(res.data);
+            if (typeof document !== "undefined") {
+                document.documentElement.setAttribute("data-theme", res.data.theme_mode || "dark");
+                document.documentElement.setAttribute("data-accent", res.data.theme_accent || "purple");
+            }
         } catch (err) {
             console.error("Failed to fetch user:", err);
             localStorage.removeItem("token");
@@ -95,13 +104,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const updateProfile = async (data: { nickname?: string, username?: string }) => {
+    const updateProfile = async (data: { nickname?: string, username?: string, show_last_seen?: boolean, show_online_status?: boolean, theme_mode?: "dark" | "light", theme_accent?: "purple" | "blue" | "green" | "rose" }) => {
         if (!token) return;
         try {
             const res = await axios.patch(`${API_URL}/users/me`, data, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUser(res.data);
+            if (typeof document !== "undefined") {
+                document.documentElement.setAttribute("data-theme", res.data.theme_mode || "dark");
+                document.documentElement.setAttribute("data-accent", res.data.theme_accent || "purple");
+            }
         } catch (err) {
             console.error("Update profile failed:", err);
             throw err;

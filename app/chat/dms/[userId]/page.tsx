@@ -1,19 +1,15 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Send, Edit2, Trash2, Check, X, Reply, SmilePlus, ArrowLeft } from "lucide-react";
+import { Send, Edit2, Trash2, Check, X, Reply, SmilePlus, ArrowLeft, Search, MoreVertical, Copy, Pin, Forward, Archive, BellOff, Mail } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
 
 const REPLY_PREFIX = /^\[\[reply:(.+?)\]\]\n?/;
+const REACTION_EMOJIS = ["❤️", "😂", "👍", "🔥"];
 
-type ReplyMeta = {
-    id: number;
-    username: string;
-    nickname: string;
-    content: string;
-};
+type ReplyMeta = { id: number; username: string; nickname: string; content: string };
 
 function parseMessageContent(raw: string) {
     const match = raw.match(REPLY_PREFIX);
@@ -21,8 +17,7 @@ function parseMessageContent(raw: string) {
     try {
         const prefix = match[0];
         const reply = JSON.parse(decodeURIComponent(match[1])) as ReplyMeta;
-        const body = raw.slice(prefix.length);
-        return { body, reply, prefix };
+        return { body: raw.slice(prefix.length), reply, prefix };
     } catch {
         return { body: raw, reply: null as ReplyMeta | null, prefix: "" };
     }
@@ -42,48 +37,58 @@ export default function DMChatPage() {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editValue, setEditValue] = useState("");
     const [replyingTo, setReplyingTo] = useState<ReplyMeta | null>(null);
-    const [isTyping, setIsTyping] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
+    const [isTypingRemote, setIsTypingRemote] = useState(false);
+    const [search, setSearch] = useState("");
+    const [showMenu, setShowMenu] = useState(false);
+    const [online, setOnline] = useState(false);
+    const [forwardTo, setForwardTo] = useState("");
     const scrollRef = useRef<HTMLDivElement>(null);
-    const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
     const touchStartRef = useRef<number | null>(null);
 
     const wsUrl = token ? `${process.env.NEXT_PUBLIC_WS_URL}/ws/dms/${userId}?token=${token}` : null;
-    const { messages, send, setMessages, connected } = useWebSocket(wsUrl);
+    const { messages, send, sendJson, setMessages, connected } = useWebSocket(wsUrl);
 
     useEffect(() => {
-        api.get(`/dms/${userId}`).then((res) => {
-            setMessages(res.data.map((m: any) => ({ type: "dm", ...m })));
-        });
-        api.get("/friends/all").then((res) => {
-            const found = (res.data as any[]).find((u) => u.id === Number(userId));
+        (async () => {
+            const [dmRes, usersRes] = await Promise.all([api.get(`/dms/${userId}`), api.get("/dms/users/all")]);
+            const base = dmRes.data.map((m: any) => ({ type: "dm", ...m }));
+            setMessages(base);
+            const found = (usersRes.data as any[]).find((u) => u.id === Number(userId));
             if (found) setOtherUser(found);
-            else {
-                api.get(`/users/search?q=`).then((res2) => {
-                    const found2 = (res2.data as any[]).find((u) => u.id === Number(userId));
-                    if (found2) setOtherUser(found2);
-                });
-            }
-        });
-    }, [userId, setMessages]);
+            const unseenIds = base.filter((m: any) => m.sender_id === Number(userId) && !m.seen_at).map((m: any) => m.id);
+            if (unseenIds.length) sendJson({ type: "seen", message_ids: unseenIds });
+        })().catch(() => {});
+    }, [userId, setMessages, sendJson]);
+
+    useEffect(() => {
+        if (!messages.length) return;
+        const latest = messages[messages.length - 1] as any;
+        if (latest?.type === "typing" && latest.sender_id === Number(userId)) {
+            setIsTypingRemote(Boolean(latest.is_typing));
+        }
+        if (latest?.type === "presence") {
+            if (typeof latest.online === "boolean") setOnline(latest.online);
+        }
+        if (latest?.type === "seen" && Array.isArray(latest.message_ids)) {
+            const ids = new Set(latest.message_ids as number[]);
+            setMessages((prev) => (prev as any[]).map((m) => (ids.has(m.id) ? { ...m, seen_at: latest.seen_at || new Date().toISOString() } : m)));
+        }
+    }, [messages, setMessages, userId]);
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }, [messages]);
 
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") router.push("/chat");
-        };
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") router.push("/chat"); };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
     }, [router]);
 
     const onInput = (value: string) => {
         setInput(value);
-        setIsTyping(value.trim().length > 0);
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-        typingTimerRef.current = setTimeout(() => setIsTyping(false), 1200);
+        sendJson({ type: "typing", is_typing: value.trim().length > 0 });
     };
 
     const handleSend = (e?: React.FormEvent) => {
@@ -92,17 +97,18 @@ export default function DMChatPage() {
         send(buildMessageContent(input.trim(), replyingTo));
         setInput("");
         setReplyingTo(null);
-        setIsTyping(false);
+        sendJson({ type: "typing", is_typing: false });
     };
 
-    const handleDelete = async (msgId: number) => {
-        if (!confirm("Delete this message?")) return;
+    const handleDelete = async (msgId: number, forMeOnly = false) => {
         try {
-            await api.delete(`/dms/messages/${msgId}`);
-            setMessages((prev) => (prev as any[]).map((m) => (m.id === msgId ? { ...m, content: "This message was deleted", is_deleted: true } : m)));
-        } catch (err) {
-            console.error(err);
-        }
+            await api.delete(`/dms/messages/${msgId}?for_me_only=${forMeOnly}`);
+            if (forMeOnly) {
+                setMessages((prev) => (prev as any[]).filter((m) => m.id !== msgId));
+            } else {
+                setMessages((prev) => (prev as any[]).map((m) => (m.id === msgId ? { ...m, content: "This message was deleted", is_deleted: true } : m)));
+            }
+        } catch {}
     };
 
     const startEdit = (msg: any) => {
@@ -112,33 +118,66 @@ export default function DMChatPage() {
 
     const handleEditSave = async (msgId: number) => {
         if (!editValue.trim()) return;
-        try {
-            const current = (messages as any[]).find((m) => m.id === msgId);
-            const parsed = parseMessageContent(String(current?.content || ""));
-            const payload = { content: `${parsed.prefix}${editValue.trim()}` };
-            const res = await api.patch(`/dms/messages/${msgId}`, payload);
-            setMessages((prev) => (prev as any[]).map((m) => (m.id === msgId ? { ...m, ...res.data, type: "dm" } : m)));
-            setEditingId(null);
-            setEditValue("");
-        } catch (err) {
-            console.error(err);
-        }
+        const current = (messages as any[]).find((m) => m.id === msgId);
+        const parsed = parseMessageContent(String(current?.content || ""));
+        const res = await api.patch(`/dms/messages/${msgId}`, { content: `${parsed.prefix}${editValue.trim()}` });
+        setMessages((prev) => (prev as any[]).map((m) => (m.id === msgId ? { ...m, ...res.data, type: "dm" } : m)));
+        setEditingId(null);
+        setEditValue("");
     };
+
+    const react = async (id: number, emoji: string) => {
+        const res = await api.patch(`/dms/messages/${id}/react`, { emoji });
+        setMessages((prev) => (prev as any[]).map((m) => (m.id === id ? { ...m, ...res.data, type: "dm" } : m)));
+    };
+
+    const pin = async (id: number) => {
+        const res = await api.patch(`/dms/messages/${id}/pin`);
+        setMessages((prev) => (prev as any[]).map((m) => (m.id === id ? { ...m, ...res.data, type: "dm" } : m)));
+    };
+
+    const forward = async (id: number) => {
+        const to = Number(forwardTo || userId);
+        if (!to) return;
+        await api.post(`/dms/messages/${id}/forward`, { to_user_id: to });
+        setForwardTo("");
+    };
+
+    const copyMessage = async (m: any) => {
+        await navigator.clipboard.writeText(parseMessageContent(String(m.content || "")).body);
+    };
+
+    const setPref = async (payload: any) => {
+        await api.patch(`/dms/conversations/${userId}/preferences`, payload);
+        setShowMenu(false);
+    };
+
+    const clearChat = async () => {
+        await api.post(`/dms/conversations/${userId}/clear`);
+        setMessages([]);
+        setShowMenu(false);
+    };
+
+    const blockUser = async () => {
+        await api.post(`/users/block/${userId}`);
+        alert("User blocked");
+        router.push("/chat");
+    };
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return (messages as any[]).filter((m) => m.type === "dm" && (!q || String(m.content || "").toLowerCase().includes(q)));
+    }, [messages, search]);
 
     if (!otherUser) return <div style={s.center}>Loading conversation...</div>;
     const addEmoji = (emoji: string) => setInput((prev) => `${prev}${emoji}`);
 
     return (
-        <div
-            style={s.container}
-            onTouchStart={(e) => { touchStartRef.current = e.changedTouches[0]?.clientX ?? null; }}
-            onTouchEnd={(e) => {
-                if (touchStartRef.current == null) return;
-                const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartRef.current;
-                if (dx > 80) router.push("/chat");
-                touchStartRef.current = null;
-            }}
-        >
+        <div style={s.container} onTouchStart={(e) => { touchStartRef.current = e.changedTouches[0]?.clientX ?? null; }} onTouchEnd={(e) => {
+            if (touchStartRef.current == null) return;
+            if ((e.changedTouches[0]?.clientX ?? 0) - touchStartRef.current > 80) router.push("/chat");
+            touchStartRef.current = null;
+        }}>
             <header style={s.header} className="glass">
                 <div style={s.headerInfo}>
                     <button style={s.toolBtn} onClick={() => router.push("/chat")}><ArrowLeft size={15} /></button>
@@ -149,32 +188,51 @@ export default function DMChatPage() {
                     </div>
                 </div>
                 <div style={s.headerStatus}>
-                    <span className="pulse-dot" style={{ ...s.statusDot, background: connected ? "var(--success)" : "var(--danger)", color: connected ? "var(--success)" : "var(--danger)" }} />
-                    <span style={s.statusText}>{connected ? "Online" : "Offline"}</span>
+                    <span className="pulse-dot" style={{ ...s.statusDot, background: online ? "var(--success)" : "var(--danger)" }} />
+                    <span style={s.statusText}>{online ? "Online" : `Last seen ${otherUser.last_seen_at ? new Date(otherUser.last_seen_at).toLocaleTimeString() : "recently"}`}</span>
+                    <div style={{ position: "relative" }}>
+                        <button style={s.toolBtn} onClick={() => setShowMenu((v) => !v)}><MoreVertical size={14} /></button>
+                        {showMenu && (
+                            <div style={s.menu}>
+                                <button style={s.menuBtn} onClick={() => setPref({ is_archived: true })}><Archive size={13} /> Archive</button>
+                                <button style={s.menuBtn} onClick={() => setPref({ is_muted: true })}><BellOff size={13} /> Mute</button>
+                                <button style={s.menuBtn} onClick={() => setPref({ marked_unread: true })}><Mail size={13} /> Mark Unread</button>
+                                <button style={s.menuBtn} onClick={clearChat}><Trash2 size={13} /> Clear Chat</button>
+                                <button style={{ ...s.menuBtn, color: "#ff99aa" }} onClick={blockUser}>Block User</button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
+            <div style={s.searchBar}><Search size={14} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search inside chat" style={s.searchInput} /></div>
+
             <div style={s.messageArea} ref={scrollRef}>
                 <div style={s.historyWall}>
-                    {(messages as any[]).map((m: any, i) => {
+                    {filtered.map((m: any, i) => {
                         const isMe = m.sender_id === user?.id;
                         const isEditing = editingId === m.id;
                         const parsed = parseMessageContent(String(m.content || ""));
-
+                        let status = "";
+                        if (isMe) status = m.seen_at ? "Seen" : m.delivered_at ? "Delivered" : connected ? "Sent" : "";
+                        const reactions = JSON.parse(m.reactions || "{}");
                         return (
-                            <div key={i} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row", animation: "messageIn 0.24s ease" }}>
+                            <div key={`${m.id}-${i}`} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row" }}>
                                 <div style={{ ...s.msgCol, alignItems: isMe ? "flex-end" : "flex-start" }}>
                                     <div style={s.msgMeta}>
                                         <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                                         {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
-                                        {isMe && <span style={s.seenTag}>Seen</span>}
+                                        {status && <span style={s.seenTag}>{status}</span>}
                                         <div style={s.msgActions}>
                                             {!m.is_deleted && !isEditing && <button onClick={() => setReplyingTo({ id: m.id, username: isMe ? user?.username || "" : otherUser.username || "", nickname: isMe ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) })} style={s.actionBtn}><Reply size={12} /></button>}
+                                            {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.actionBtn}><Copy size={12} /></button>}
+                                            {!m.is_deleted && <button onClick={() => pin(m.id)} style={s.actionBtn}><Pin size={12} /></button>}
+                                            {!m.is_deleted && <button onClick={() => forward(m.id)} style={s.actionBtn}><Forward size={12} /></button>}
                                             {isMe && !m.is_deleted && !isEditing && <button onClick={() => startEdit(m)} style={s.actionBtn}><Edit2 size={12} /></button>}
-                                            {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id)} style={s.actionBtn}><Trash2 size={12} /></button>}
+                                            {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, false)} style={s.actionBtn}><Trash2 size={12} /></button>}
+                                            {!m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, true)} style={s.actionBtn}>Me</button>}
                                         </div>
                                     </div>
-
                                     {isEditing ? (
                                         <div style={s.editWrap}>
                                             <input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus />
@@ -184,14 +242,14 @@ export default function DMChatPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal", wordBreak: "break-word", overflowWrap: "anywhere" }}>
-                                            {parsed.reply && (
-                                                <div style={s.replyPreview}>
-                                                    <p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p>
-                                                    <p style={s.replyText}>{parsed.reply.content}</p>
-                                                </div>
-                                            )}
+                                        <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
+                                            {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
                                             {parsed.body}
+                                            <div style={s.reactionRow}>
+                                                {REACTION_EMOJIS.map((emoji) => (
+                                                    <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji} {Array.isArray(reactions[emoji]) ? reactions[emoji].length : 0}</button>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -202,35 +260,22 @@ export default function DMChatPage() {
             </div>
 
             <form onSubmit={handleSend} style={s.inputArea} className="glass">
-                {replyingTo && (
-                    <div style={s.replyComposer}>
-                        <div>
-                            <p style={s.replyComposerTitle}>Replying to @{replyingTo.username || replyingTo.nickname}</p>
-                            <p style={s.replyComposerText}>{replyingTo.content}</p>
-                        </div>
-                        <button type="button" style={s.actionBtn} onClick={() => setReplyingTo(null)}><X size={14} /></button>
-                    </div>
-                )}
-                {isTyping && <p style={s.typing}>You are typing...</p>}
+                {replyingTo && <div style={s.replyComposer}><div><p style={s.replyComposerTitle}>Replying to @{replyingTo.username || replyingTo.nickname}</p><p style={s.replyComposerText}>{replyingTo.content}</p></div><button type="button" style={s.actionBtn} onClick={() => setReplyingTo(null)}><X size={14} /></button></div>}
+                {isTypingRemote && <p style={s.typing}>Typing...</p>}
                 <div style={s.inputRow}>
                     <button type="button" style={s.toolBtn} onClick={() => setShowEmoji((v) => !v)}><SmilePlus size={16} /></button>
                     <input value={input} onChange={(e) => onInput(e.target.value)} placeholder={`Message @${otherUser.nickname}`} style={s.input} autoFocus />
+                    <input value={forwardTo} onChange={(e) => setForwardTo(e.target.value)} placeholder="Forward id" style={{ ...s.input, maxWidth: 110 }} />
                     <button type="submit" disabled={!input.trim()} style={{ ...s.sendBtn, opacity: input.trim() ? 1 : 0.45 }}><Send size={18} /></button>
                 </div>
-                {showEmoji && (
-                    <div style={s.emojiWrap}>
-                        {["\u{1F600}","\u{1F602}","\u{1F60D}","\u{1F973}","\u{1F525}","\u{1F44D}","\u{1F64F}","\u{2764}\u{FE0F}","\u{1F60E}","\u{1F91D}","\u{1F389}","\u{1F680}","\u{1F605}","\u{1F622}","\u{1F914}","\u{1F64C}"].map((e) => (
-                            <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>
-                        ))}
-                    </div>
-                )}
+                {showEmoji && <div style={s.emojiWrap}>{["😀", "😂", "😍", "🥳", "🔥", "👍", "🙏", "❤️", "😎", "🤝", "🎉", "🚀", "😅", "😢", "🤔", "🙌"].map((e) => <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>)}</div>}
             </form>
         </div>
     );
 }
 
 const s: Record<string, React.CSSProperties> = {
-    container: { display: "flex", flexDirection: "column", height: "100%", background: "radial-gradient(circle at 10% -10%, rgba(119,101,255,0.14), transparent 46%), #0c1122" },
+    container: { display: "flex", flexDirection: "column", height: "100%", background: "radial-gradient(circle at 10% -10%, rgba(119,101,255,0.14), transparent 46%), var(--bg-base)" },
     header: { height: 70, padding: "0 1rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(140,148,204,0.2)" },
     headerInfo: { display: "flex", alignItems: "center", gap: 10 },
     roomName: { fontWeight: 800, fontSize: "1rem" },
@@ -239,6 +284,8 @@ const s: Record<string, React.CSSProperties> = {
     statusDot: { width: 8, height: 8, borderRadius: 999, display: "inline-block" },
     statusText: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 700 },
     avatarSmall: { width: 36, height: 36, borderRadius: 12, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff" },
+    searchBar: { height: 42, borderBottom: "1px solid rgba(140,148,204,0.14)", display: "flex", alignItems: "center", gap: 8, padding: "0 0.8rem", color: "var(--text-muted)" },
+    searchInput: { background: "transparent", border: "none", borderRadius: 0, boxShadow: "none", padding: 0, color: "var(--text-primary)" },
     messageArea: { flex: 1, overflowY: "auto" },
     historyWall: { padding: "1rem", display: "flex", flexDirection: "column", gap: "0.9rem" },
     msgRow: { display: "flex", gap: 10, maxWidth: "86%" },
@@ -255,6 +302,8 @@ const s: Record<string, React.CSSProperties> = {
     replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.55)", paddingLeft: 8, marginBottom: 5 },
     replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.92)" },
     replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 },
+    reactionRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
+    reactionBtn: { border: "1px solid rgba(255,255,255,0.2)", background: "rgba(11,16,34,0.32)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.4rem", fontSize: 11, cursor: "pointer" },
     editWrap: { width: "100%", borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(20,26,47,0.75)", padding: 8 },
     editInput: { background: "#12182e", border: "1px solid #6352f0", borderRadius: 10, padding: "0.52rem 0.65rem", color: "#fff" },
     editActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 },
@@ -265,10 +314,11 @@ const s: Record<string, React.CSSProperties> = {
     typing: { fontSize: "0.74rem", color: "#c0c6f6", marginLeft: 5 },
     inputRow: { display: "flex", alignItems: "center", gap: 8 },
     toolBtn: { minWidth: 34, height: 34, borderRadius: 10, border: "1px solid rgba(140,148,204,0.26)", background: "rgba(15,20,36,0.7)", color: "#b9c0f7", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 11, fontWeight: 700 },
-    input: { flex: 1, background: "#11172b", border: "1px solid #2f3b66", borderRadius: 999, padding: "0.72rem 1rem", color: "#fff" },
+    input: { flex: 1, background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 999, padding: "0.72rem 1rem", color: "var(--text-primary)" },
     sendBtn: { width: 38, height: 38, border: "1px solid rgba(170,160,255,0.45)", borderRadius: 999, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     emojiWrap: { display: "flex", flexWrap: "wrap", gap: 6, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(13,18,34,0.75)", borderRadius: 12, padding: 8 },
     emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
+    menu: { position: "absolute", right: 0, top: 38, zIndex: 30, width: 170, borderRadius: 10, background: "rgba(15,20,36,0.95)", border: "1px solid rgba(140,148,204,0.3)", padding: 4 },
+    menuBtn: { width: "100%", border: "none", background: "transparent", color: "#d8dbff", padding: "0.45rem 0.5rem", textAlign: "left", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
 };
-

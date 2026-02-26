@@ -15,6 +15,21 @@
   --danger: #ef4f6f;
 }
 
+[data-theme="light"] {
+  --bg-base: #eff2ff;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f5f7ff;
+  --bg-glass: rgba(255, 255, 255, 0.8);
+  --border: #c9d1f7;
+  --text-primary: #13182d;
+  --text-muted: #5a638b;
+}
+
+[data-accent="purple"] { --accent: #7765ff; --accent-2: #5d4ce7; --accent-hover: #6352f0; }
+[data-accent="blue"] { --accent: #3b82f6; --accent-2: #1d4ed8; --accent-hover: #2563eb; }
+[data-accent="green"] { --accent: #16a34a; --accent-2: #15803d; --accent-hover: #22c55e; }
+[data-accent="rose"] { --accent: #e11d48; --accent-2: #be123c; --accent-hover: #f43f5e; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {

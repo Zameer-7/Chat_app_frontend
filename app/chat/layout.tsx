@@ -44,6 +44,11 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
             ]);
             setRooms(r.data);
             setDmConversations(d.data);
+            const unreadFromApi: Record<number, number> = {};
+            (d.data || []).forEach((conv: any) => {
+                if (conv?.user?.id) unreadFromApi[conv.user.id] = Number(conv.unread_count || 0);
+            });
+            setUnreadCounts((prev) => ({ ...unreadFromApi, ...prev }));
             setFriendRequests(f.data);
             setFriends(fa.data);
         } catch (err) {
@@ -284,7 +289,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                     <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
                                     <div style={styles.dmInfo}>
                                         <p style={{ ...styles.dmName, fontWeight: unreadCounts[f.id] ? 800 : 600 }}>{f.nickname}</p>
-                                        <p style={styles.dmLast}>{conv?.last_message || "Start chatting"}</p>
+                                        <p style={styles.dmLast}>{conv?.is_muted ? "Muted" : conv?.last_message || "Start chatting"}</p>
                                     </div>
                                     {!!unreadCounts[f.id] && <span style={styles.unreadBadge}>{unreadCounts[f.id] > 99 ? "99+" : unreadCounts[f.id]}</span>}
                                     <span style={styles.onlineDot} />
@@ -300,7 +305,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                     <div style={styles.dmAvatar}>{conv.user.nickname[0]}</div>
                                     <div style={styles.dmInfo}>
                                         <p style={{ ...styles.dmName, fontWeight: unreadCounts[conv.user.id] ? 800 : 600 }}>{conv.user.nickname}</p>
-                                        <p style={styles.dmLast}>{conv.last_message}</p>
+                                        <p style={styles.dmLast}>{conv.is_archived ? "[Archived] " : ""}{conv.last_message}</p>
                                     </div>
                                     {!!unreadCounts[conv.user.id] && <span style={styles.unreadBadge}>{unreadCounts[conv.user.id] > 99 ? "99+" : unreadCounts[conv.user.id]}</span>}
                                 </Link>
