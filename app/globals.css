@@ -1,16 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --bg-base: #0f1117;
-  --bg-surface: #1a1d27;
-  --bg-elevated: #22263a;
-  --border: #2e3250;
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --text-primary: #e8eaf6;
-  --text-muted: #7b82a8;
-  --success: #22c55e;
-  --danger: #ef4444;
+  --bg-base: #090d1a;
+  --bg-surface: #13192c;
+  --bg-elevated: #1a2140;
+  --bg-glass: rgba(24, 30, 54, 0.7);
+  --border: #2f3b66;
+  --accent: #7765ff;
+  --accent-2: #5d4ce7;
+  --accent-hover: #6352f0;
+  --text-primary: #f1f3ff;
+  --text-muted: #a4abd1;
+  --success: #25d56a;
+  --danger: #ef4f6f;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -21,6 +23,14 @@ html, body {
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(119, 101, 255, 0.2), transparent 55%),
+    radial-gradient(1000px 500px at 100% 0%, rgba(93, 76, 231, 0.16), transparent 50%),
+    linear-gradient(180deg, #0b1022 0%, #090d1a 100%);
 }
 
 /* Scrollbar */
@@ -29,17 +39,18 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 0.6rem 1.4rem;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 20px rgba(93, 76, 231, 0.35);
 }
-.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-primary:hover { transform: translateY(-1px) scale(1.02); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .btn-ghost {
@@ -57,13 +68,51 @@ html, body {
 input, textarea {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   color: var(--text-primary);
   padding: 0.65rem 0.9rem;
   font-size: 0.9rem;
   width: 100%;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-input:focus, textarea:focus { border-color: var(--accent); }
+input:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(119, 101, 255, 0.2);
+}
 input::placeholder, textarea::placeholder { color: var(--text-muted); }
+
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(140, 148, 204, 0.2);
+}
+
+.pulse-dot {
+  position: relative;
+}
+.pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0;
+  animation: pulseRing 1.6s ease-out infinite;
+}
+
+@keyframes pulseRing {
+  0% { transform: scale(0.7); opacity: 0.9; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInFast {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

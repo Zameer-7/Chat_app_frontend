@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Send, User, Edit2, Trash2, Check, X, Reply } from "lucide-react";
+import { Send, User, Edit2, Trash2, Check, X, Reply, SmilePlus, Paperclip } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
@@ -41,28 +41,23 @@ export default function DMChatPage() {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editValue, setEditValue] = useState("");
     const [replyingTo, setReplyingTo] = useState<ReplyMeta | null>(null);
+    const [isTyping, setIsTyping] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const wsUrl = token ? `${process.env.NEXT_PUBLIC_WS_URL}/ws/dms/${userId}?token=${token}` : null;
     const { messages, send, setMessages, connected } = useWebSocket(wsUrl);
 
     useEffect(() => {
-        // Load history
         api.get(`/dms/${userId}`).then((res) => {
-            setMessages(res.data.map((m: any) => ({
-                type: "dm",
-                ...m
-            })));
+            setMessages(res.data.map((m: any) => ({ type: "dm", ...m })));
         });
-        // Find user details
         api.get("/friends/all").then((res) => {
-            const found = (res.data as any[]).find(u => u.id === Number(userId));
+            const found = (res.data as any[]).find((u) => u.id === Number(userId));
             if (found) setOtherUser(found);
             else {
-                // Fallback: fetch from direct user endpoint if not a friend? 
-                // For now assume they are friends or in recent DMs
-                api.get(`/users/search?q=`).then(res2 => {
-                    const found2 = (res2.data as any[]).find(u => u.id === Number(userId));
+                api.get(`/users/search?q=`).then((res2) => {
+                    const found2 = (res2.data as any[]).find((u) => u.id === Number(userId));
                     if (found2) setOtherUser(found2);
                 });
             }
@@ -73,19 +68,27 @@ export default function DMChatPage() {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }, [messages]);
 
+    const onInput = (value: string) => {
+        setInput(value);
+        setIsTyping(value.trim().length > 0);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => setIsTyping(false), 1200);
+    };
+
     const handleSend = (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!input.trim()) return;
         send(buildMessageContent(input.trim(), replyingTo));
         setInput("");
         setReplyingTo(null);
+        setIsTyping(false);
     };
 
     const handleDelete = async (msgId: number) => {
         if (!confirm("Delete this message?")) return;
         try {
             await api.delete(`/dms/messages/${msgId}`);
-            setMessages(prev => (prev as any[]).map(m => m.id === msgId ? { ...m, content: "This message was deleted", is_deleted: true } : m));
+            setMessages((prev) => (prev as any[]).map((m) => (m.id === msgId ? { ...m, content: "This message was deleted", is_deleted: true } : m)));
         } catch (err) {
             console.error(err);
         }
@@ -103,7 +106,7 @@ export default function DMChatPage() {
             const parsed = parseMessageContent(String(current?.content || ""));
             const payload = { content: `${parsed.prefix}${editValue.trim()}` };
             const res = await api.patch(`/dms/messages/${msgId}`, payload);
-            setMessages(prev => (prev as any[]).map(m => m.id === msgId ? { ...m, ...res.data, type: "dm" } : m));
+            setMessages((prev) => (prev as any[]).map((m) => (m.id === msgId ? { ...m, ...res.data, type: "dm" } : m)));
             setEditingId(null);
             setEditValue("");
         } catch (err) {
@@ -111,32 +114,30 @@ export default function DMChatPage() {
         }
     };
 
-    if (!otherUser) return <div style={s.center}>Loading...</div>;
+    if (!otherUser) return <div style={s.center}>Loading conversation...</div>;
 
     return (
         <div style={s.container}>
-            {/* Header */}
-            <header style={s.header}>
+            <header style={s.header} className="glass">
                 <div style={s.headerInfo}>
                     <div style={s.avatarSmall}>{otherUser.nickname[0].toUpperCase()}</div>
-                    <div style={s.headerText}>
+                    <div>
                         <h2 style={s.roomName}>{otherUser.nickname}</h2>
                         <span style={s.usernameSmall}>@{otherUser.username}</span>
                     </div>
                 </div>
                 <div style={s.headerStatus}>
-                    <div style={{ ...s.statusDot, background: connected ? "var(--success)" : "var(--danger)" }} />
-                    <span style={s.statusText}>{connected ? "Connected" : "Reconnecting..."}</span>
+                    <span className="pulse-dot" style={{ ...s.statusDot, background: connected ? "var(--success)" : "var(--danger)", color: connected ? "var(--success)" : "var(--danger)" }} />
+                    <span style={s.statusText}>{connected ? "Connected" : "Reconnecting"}</span>
                 </div>
             </header>
 
-            {/* Messages */}
             <div style={s.messageArea} ref={scrollRef}>
                 <div style={s.historyWall}>
-                    <div style={s.welcome}>
-                        <div style={s.welcomeIcon}><User size={32} /></div>
-                        <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>{otherUser.nickname}</h1>
-                        <p style={{ color: 'var(--text-muted)' }}>This is the beginning of your legendary conversation with **@{otherUser.username}**.</p>
+                    <div style={s.welcomeCard}>
+                        <div style={s.welcomeIcon}><User size={24} /></div>
+                        <h1 style={s.welcomeTitle}>Conversation with {otherUser.nickname}</h1>
+                        <p style={s.welcomeSub}>Start chatting in real time.</p>
                     </div>
 
                     {(messages as any[]).map((m: any, i) => {
@@ -145,52 +146,29 @@ export default function DMChatPage() {
                         const parsed = parseMessageContent(String(m.content || ""));
 
                         return (
-                            <div key={i} style={{ ...s.msgRow, flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                                <div style={{ ...s.msgCol, alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                            <div key={i} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row", animation: "messageIn 0.24s ease" }}>
+                                <div style={{ ...s.msgCol, alignItems: isMe ? "flex-end" : "flex-start" }}>
                                     <div style={s.msgMeta}>
-                                        <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                                        <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                                         {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
-                                        {isMe && !m.is_deleted && !isEditing && (
-                                            <div style={s.msgActions}>
-                                                <button onClick={() => {
-                                                    setReplyingTo({
-                                                        id: m.id,
-                                                        username: m.sender_username || user?.username || "",
-                                                        nickname: m.sender_nickname || user?.nickname || "You",
-                                                        content: parsed.body.slice(0, 120)
-                                                    });
-                                                }} style={s.actionBtn}><Reply size={12} /></button>
-                                                <button onClick={() => startEdit(m)} style={s.actionBtn}><Edit2 size={12} /></button>
-                                                <button onClick={() => handleDelete(m.id)} style={s.actionBtn}><Trash2 size={12} /></button>
-                                            </div>
-                                        )}
-                                        {!isMe && !m.is_deleted && !isEditing && (
-                                            <button onClick={() => {
-                                                setReplyingTo({
-                                                    id: m.id,
-                                                    username: otherUser.username || "",
-                                                    nickname: otherUser.nickname || "User",
-                                                    content: parsed.body.slice(0, 120)
-                                                });
-                                            }} style={s.actionBtn}><Reply size={12} /></button>
-                                        )}
+                                        {isMe && <span style={s.seenTag}>Seen</span>}
+                                        <div style={s.msgActions}>
+                                            {!m.is_deleted && !isEditing && <button onClick={() => setReplyingTo({ id: m.id, username: isMe ? user?.username || "" : otherUser.username || "", nickname: isMe ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) })} style={s.actionBtn}><Reply size={12} /></button>}
+                                            {isMe && !m.is_deleted && !isEditing && <button onClick={() => startEdit(m)} style={s.actionBtn}><Edit2 size={12} /></button>}
+                                            {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id)} style={s.actionBtn}><Trash2 size={12} /></button>}
+                                        </div>
                                     </div>
 
                                     {isEditing ? (
                                         <div style={s.editWrap}>
-                                            <input
-                                                style={s.editInput}
-                                                value={editValue}
-                                                onChange={(e) => setEditValue(e.target.value)}
-                                                autoFocus
-                                            />
+                                            <input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus />
                                             <div style={s.editActions}>
-                                                <button onClick={() => handleEditSave(m.id)}><Check size={14} /></button>
-                                                <button onClick={() => setEditingId(null)}><X size={14} /></button>
+                                                <button onClick={() => handleEditSave(m.id)} style={s.actionBtn}><Check size={14} /></button>
+                                                <button onClick={() => setEditingId(null)} style={s.actionBtn}><X size={14} /></button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <div style={{ ...s.bubble, background: isMe ? 'var(--accent)' : 'var(--bg-elevated)', opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? 'italic' : 'normal' }}>
+                                        <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
                                             {parsed.reply && (
                                                 <div style={s.replyPreview}>
                                                     <p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p>
@@ -207,25 +185,22 @@ export default function DMChatPage() {
                 </div>
             </div>
 
-            {/* Input */}
-            <form onSubmit={handleSend} style={s.inputArea}>
+            <form onSubmit={handleSend} style={s.inputArea} className="glass">
                 {replyingTo && (
                     <div style={s.replyComposer}>
                         <div>
                             <p style={s.replyComposerTitle}>Replying to @{replyingTo.username || replyingTo.nickname}</p>
                             <p style={s.replyComposerText}>{replyingTo.content}</p>
                         </div>
-                        <button type="button" style={s.replyCancel} onClick={() => setReplyingTo(null)}><X size={14} /></button>
+                        <button type="button" style={s.actionBtn} onClick={() => setReplyingTo(null)}><X size={14} /></button>
                     </div>
                 )}
+                {isTyping && <p style={s.typing}>You are typing...</p>}
                 <div style={s.inputRow}>
-                <input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={`Message @${otherUser.nickname}`}
-                    autoFocus
-                />
-                <button type="submit" disabled={!input.trim()} style={s.sendBtn}><Send size={18} /></button>
+                    <button type="button" style={s.toolBtn}><SmilePlus size={16} /></button>
+                    <button type="button" style={s.toolBtn}><Paperclip size={16} /></button>
+                    <input value={input} onChange={(e) => onInput(e.target.value)} placeholder={`Message @${otherUser.nickname}`} style={s.input} autoFocus />
+                    <button type="submit" disabled={!input.trim()} style={{ ...s.sendBtn, opacity: input.trim() ? 1 : 0.45 }}><Send size={18} /></button>
                 </div>
             </form>
         </div>
@@ -233,40 +208,46 @@ export default function DMChatPage() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-    container: { display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-base)" },
-    header: { height: 60, flexShrink: 0, padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", background: "var(--bg-surface)" },
-    headerInfo: { display: "flex", alignItems: "center", gap: 12 },
-    headerText: { display: "flex", flexDirection: "column" },
-    roomName: { fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)" },
+    container: { display: "flex", flexDirection: "column", height: "100%", background: "radial-gradient(circle at 10% -10%, rgba(119,101,255,0.14), transparent 46%), #0c1122" },
+    header: { height: 70, padding: "0 1rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(140,148,204,0.2)" },
+    headerInfo: { display: "flex", alignItems: "center", gap: 10 },
+    roomName: { fontWeight: 800, fontSize: "1rem" },
     usernameSmall: { fontSize: "0.75rem", color: "var(--text-muted)" },
     headerStatus: { display: "flex", alignItems: "center", gap: 8 },
-    statusDot: { width: 8, height: 8, borderRadius: "50%" },
-    statusText: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600 },
-    messageArea: { flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" },
-    historyWall: { padding: "2rem", display: "flex", flexDirection: "column", gap: "1.25rem" },
-    welcome: { marginBottom: "3rem", borderBottom: "1px solid var(--border)", paddingBottom: "2.5rem" },
-    welcomeIcon: { width: 64, height: 64, borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.5rem", color: "var(--accent)" },
-    msgRow: { display: "flex", gap: 12, maxWidth: "85%" },
+    statusDot: { width: 8, height: 8, borderRadius: 999, display: "inline-block" },
+    statusText: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 700 },
+    avatarSmall: { width: 36, height: 36, borderRadius: 12, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff" },
+    messageArea: { flex: 1, overflowY: "auto" },
+    historyWall: { padding: "1rem", display: "flex", flexDirection: "column", gap: "0.9rem" },
+    welcomeCard: { padding: "1rem", borderRadius: 14, border: "1px solid rgba(140,148,204,0.18)", background: "rgba(18,24,45,0.58)", marginBottom: 8 },
+    welcomeIcon: { width: 40, height: 40, borderRadius: 12, background: "rgba(119,101,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8, color: "#d7dbff" },
+    welcomeTitle: { fontSize: "1rem", fontWeight: 800, marginBottom: 2 },
+    welcomeSub: { color: "var(--text-muted)", fontSize: "0.85rem" },
+    msgRow: { display: "flex", gap: 10, maxWidth: "86%" },
     msgCol: { display: "flex", flexDirection: "column", gap: 4 },
-    msgMeta: { display: "flex", alignItems: "center", gap: 8, fontSize: "0.75rem", height: 18 },
+    msgMeta: { display: "flex", alignItems: "center", gap: 6, fontSize: "0.74rem" },
     msgTime: { color: "var(--text-muted)" },
-    editedTag: { color: "var(--text-muted)", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em" },
-    msgActions: { display: "flex", gap: 6, opacity: 0.6 },
-    actionBtn: { background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" },
-    bubble: { padding: "0.75rem 1rem", borderRadius: 12, fontSize: "0.95rem", lineHeight: "1.5", color: "#fff", whiteSpace: "pre-wrap" },
-    replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.5)", paddingLeft: 8, marginBottom: 6, opacity: 0.9 },
-    replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.9)" },
-    replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.82)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 320 },
-    avatarSmall: { width: 36, height: 36, borderRadius: "30%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.9rem", fontWeight: 800, color: "#fff", flexShrink: 0 },
-    editWrap: { display: "flex", flexDirection: "column", gap: 6, background: "var(--bg-elevated)", padding: 10, borderRadius: 10, width: "100%", border: "1px solid var(--accent)" },
-    editInput: { background: "var(--bg-base)", border: "none", color: "#fff", padding: "6px", borderRadius: 6, outline: "none", fontSize: "0.95rem" },
-    editActions: { display: "flex", justifyContent: "flex-end", gap: 10 },
-    inputArea: { padding: "1.5rem", display: "flex", gap: "0.75rem", background: "var(--bg-base)", flexDirection: "column" },
-    inputRow: { display: "flex", gap: "0.75rem" },
-    replyComposer: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, border: "1px solid var(--border)", background: "var(--bg-surface)", borderRadius: 10, padding: "0.6rem 0.75rem" },
-    replyComposerTitle: { fontSize: "0.75rem", fontWeight: 700, color: "var(--accent)" },
-    replyComposerText: { fontSize: "0.8rem", color: "var(--text-muted)", maxWidth: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-    replyCancel: { border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
-    sendBtn: { background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "transform 0.1s" },
-    center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" }
+    editedTag: { color: "#bcc2ff", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em" },
+    seenTag: { color: "#7fd1ff", fontSize: "0.68rem" },
+    msgActions: { display: "flex", gap: 2 },
+    actionBtn: { border: "none", background: "transparent", color: "#aeb4e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, padding: 3 },
+    bubble: { padding: "0.7rem 0.9rem", borderRadius: 16, fontSize: "0.93rem", lineHeight: "1.45", color: "#fff", whiteSpace: "pre-wrap", boxShadow: "0 10px 18px rgba(5,8,20,0.35)" },
+    myBubble: { background: "linear-gradient(138deg, #7a69ff 0%, #5f4de9 100%)", border: "1px solid rgba(170,160,255,0.45)" },
+    otherBubble: { background: "linear-gradient(138deg, #242b4f 0%, #1a213f 100%)", border: "1px solid rgba(140,148,204,0.28)" },
+    replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.55)", paddingLeft: 8, marginBottom: 5 },
+    replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.92)" },
+    replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 },
+    editWrap: { width: "100%", borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(20,26,47,0.75)", padding: 8 },
+    editInput: { background: "#12182e", border: "1px solid #6352f0", borderRadius: 10, padding: "0.52rem 0.65rem", color: "#fff" },
+    editActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 },
+    inputArea: { borderTop: "1px solid rgba(140,148,204,0.2)", padding: "0.7rem 0.9rem", display: "flex", flexDirection: "column", gap: 6 },
+    replyComposer: { display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid rgba(140,148,204,0.26)", background: "rgba(18,24,45,0.65)", borderRadius: 10, padding: "0.45rem 0.6rem" },
+    replyComposerTitle: { fontSize: "0.73rem", fontWeight: 700, color: "#c7ccff" },
+    replyComposerText: { fontSize: "0.78rem", color: "var(--text-muted)", maxWidth: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+    typing: { fontSize: "0.74rem", color: "#c0c6f6", marginLeft: 5 },
+    inputRow: { display: "flex", alignItems: "center", gap: 8 },
+    toolBtn: { minWidth: 34, height: 34, borderRadius: 10, border: "1px solid rgba(140,148,204,0.26)", background: "rgba(15,20,36,0.7)", color: "#b9c0f7", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 11, fontWeight: 700 },
+    input: { flex: 1, background: "#11172b", border: "1px solid #2f3b66", borderRadius: 999, padding: "0.72rem 1rem", color: "#fff" },
+    sendBtn: { width: 38, height: 38, border: "1px solid rgba(170,160,255,0.45)", borderRadius: 999, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
+    center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
 };
