@@ -18,7 +18,12 @@ export default function ProfilePage() {
     const [message, setMessage] = useState({ text: "", type: "" });
 
     useEffect(() => {
-        api.get("/users/blocked").then((res) => setBlocked(Array.isArray(res.data) ? res.data : [])).catch(() => setBlocked([]));
+        const loadBlocked = () => {
+            api.get("/users/blocked").then((res) => setBlocked(Array.isArray(res.data) ? res.data : [])).catch(() => setBlocked([]));
+        };
+        loadBlocked();
+        window.addEventListener("focus", loadBlocked);
+        return () => window.removeEventListener("focus", loadBlocked);
     }, []);
 
     const handleSave = async () => {

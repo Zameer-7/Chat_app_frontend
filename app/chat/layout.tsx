@@ -208,6 +208,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     };
 
     const friendMap = useMemo(() => new Map(friends.map((f) => [f.id, f])), [friends]);
+    const chatIds = useMemo(() => new Set(dmConversations.map((c) => c.user?.id)), [dmConversations]);
 
     const toggleSelectDm = (id: number) => {
         setSelectedDmIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -283,7 +284,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
                     {activeSidebarTab === "friends" && (
                         <div style={styles.listWrap}>
-                            {friends.map((f) => {
+                            {friends.filter((f) => chatIds.has(f.id)).map((f) => {
                                 const active = pathname.includes(`/dms/${f.id}`);
                                 const hasUnread = !!unreadCounts[f.id];
                                 return (

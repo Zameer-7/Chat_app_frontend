@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Send, Edit2, Trash2, Check, X, Reply, SmilePlus, ArrowLeft, Search, MoreVertical, Copy, Pin, Forward, Archive, BellOff, Mail } from "lucide-react";
+import { Send, Edit2, Trash2, Check, X, Reply, Smile, ArrowLeft, Search, MoreVertical, Copy, Pin, Forward, Archive, BellOff, Mail } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
 
 const REPLY_PREFIX = /^\[\[reply:(.+?)\]\]\n?/;
-const REACTION_EMOJIS = ["❤️", "😂", "👍", "🔥"];
+const REACTION_EMOJIS = ["\u2764\uFE0F", "\u{1F602}", "\u{1F44D}", "\u{1F525}"];
 
 type ReplyMeta = { id: number; username: string; nickname: string; content: string };
 
@@ -43,6 +43,7 @@ export default function DMChatPage() {
     const [showMenu, setShowMenu] = useState(false);
     const [online, setOnline] = useState(false);
     const [forwardTo, setForwardTo] = useState("");
+    const [blockedIds, setBlockedIds] = useState<number[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
     const touchStartRef = useRef<number | null>(null);
 
@@ -51,10 +52,12 @@ export default function DMChatPage() {
 
     useEffect(() => {
         (async () => {
-            const [dmRes, userRes] = await Promise.all([api.get(`/dms/${userId}`), api.get(`/users/${userId}`)]);
+            const [dmRes, userRes, blockedRes] = await Promise.all([api.get(`/dms/${userId}`), api.get(`/users/${userId}`), api.get("/users/blocked")]);
             const base = dmRes.data.map((m: any) => ({ type: "dm", ...m }));
             setMessages(base);
             setOtherUser(userRes.data);
+            const rows = Array.isArray(blockedRes.data) ? blockedRes.data : [];
+            setBlockedIds(rows.map((b: any) => Number(b.blocked_id)).filter((n: number) => Number.isFinite(n)));
             const unseenIds = base.filter((m: any) => m.sender_id === Number(userId) && !m.seen_at).map((m: any) => m.id);
             if (unseenIds.length) sendJson({ type: "seen", message_ids: unseenIds });
         })().catch(() => {});
@@ -92,6 +95,7 @@ export default function DMChatPage() {
 
     const handleSend = (e?: React.FormEvent) => {
         e?.preventDefault();
+        if (blockedIds.includes(Number(userId))) return;
         if (!input.trim()) return;
         send(buildMessageContent(input.trim(), replyingTo));
         setInput("");
@@ -159,8 +163,8 @@ export default function DMChatPage() {
 
     const blockUser = async () => {
         await api.post(`/users/block/${userId}`);
-        alert("User blocked");
-        router.push("/chat");
+        setBlockedIds((prev) => Array.from(new Set([...prev, Number(userId)])));
+        setShowMenu(false);
     };
 
     const filtered = useMemo(() => {
@@ -242,7 +246,7 @@ export default function DMChatPage() {
                                                 {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.reactionGhost}><Copy size={11} /></button>}
                                                 {isMe && !m.is_deleted && !isEditing && <button onClick={() => startEdit(m)} style={s.reactionGhost}><Edit2 size={11} /></button>}
                                                 {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, false)} style={s.reactionGhost}><Trash2 size={11} /></button>}
-                                                {!m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, true)} style={s.reactionGhost}>Del me</button>}
+                                                
                                                 {REACTION_EMOJIS.map((emoji) => (
                                                     <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>
                                                 ))}
@@ -264,15 +268,16 @@ export default function DMChatPage() {
             </div>
 
             <form onSubmit={handleSend} style={s.inputArea} className="glass">
+                {blockedIds.includes(Number(userId)) && (<div style={s.blockedBanner}>You blocked this user. Unblock from Settings to send messages.</div>)}
                 {replyingTo && <div style={s.replyComposer}><div><p style={s.replyComposerTitle}>Replying to @{replyingTo.username || replyingTo.nickname}</p><p style={s.replyComposerText}>{replyingTo.content}</p></div><button type="button" style={s.actionBtn} onClick={() => setReplyingTo(null)}><X size={14} /></button></div>}
                 {isTypingRemote && <p style={s.typing}>Typing...</p>}
                 <div style={s.inputRow}>
-                    <button type="button" style={s.toolBtn} onClick={() => setShowEmoji((v) => !v)}><SmilePlus size={16} /></button>
-                    <input value={input} onChange={(e) => onInput(e.target.value)} placeholder={`Message @${otherUser.nickname}`} style={s.input} autoFocus />
+                    <button type="button" style={s.toolBtn} onClick={() => setShowEmoji((v) => !v)} title="Emoji"><Smile size={14} /></button>
+                    <input value={input} onChange={(e) => onInput(e.target.value)} disabled={blockedIds.includes(Number(userId))} placeholder={blockedIds.includes(Number(userId)) ? "You blocked this user" : `Message @${otherUser.nickname}`} style={s.input} autoFocus />
                     <input value={forwardTo} onChange={(e) => setForwardTo(e.target.value)} placeholder="Forward to user id" style={{ ...s.forwardInput }} />
-                    <button type="submit" disabled={!input.trim()} style={{ ...s.sendBtn, opacity: input.trim() ? 1 : 0.45 }}><Send size={18} /></button>
+                    <button type="submit" disabled={!input.trim() || blockedIds.includes(Number(userId))} style={{ ...s.sendBtn, opacity: input.trim() && !blockedIds.includes(Number(userId)) ? 1 : 0.45 }}><Send size={18} /></button>
                 </div>
-                {showEmoji && <div style={s.emojiWrap}>{["😀", "😂", "😍", "🥳", "🔥", "👍", "🙏", "❤️", "😎", "🤝", "🎉", "🚀", "😅", "😢", "🤔", "🙌"].map((e) => <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>)}</div>}
+                {showEmoji && <div style={s.emojiWrap}>{["\u{1F600}", "\u{1F602}", "\u{1F60D}", "\u{1F973}", "\u{1F525}", "\u{1F44D}", "\u{1F64F}", "\u2764\uFE0F", "\u{1F60E}", "\u{1F91D}", "\u{1F389}", "\u{1F680}", "\u{1F605}", "\u{1F622}", "\u{1F914}", "\u{1F64C}"].map((e) => <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>)}</div>}
             </form>
         </div>
     );
@@ -329,3 +334,5 @@ const s: Record<string, React.CSSProperties> = {
     menuBtn: { width: "100%", border: "none", background: "transparent", color: "#d8dbff", padding: "0.45rem 0.5rem", textAlign: "left", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
 };
+
+
