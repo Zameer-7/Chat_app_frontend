@@ -276,7 +276,7 @@ export default function DMChatPage() {
             </div>
 
             <form onSubmit={handleSend} style={s.inputArea} className="glass">
-                {blockedIds.includes(Number(userId)) && (<div style={s.blockedBanner}>You blocked this user. Unblock from Settings to send messages.</div>)}
+                {blockedIds.includes(Number(userId)) && (<div style={s.blockedBanner}>You blocked this user. Use the menu to unblock and send messages.</div>)}
                 {replyingTo && <div style={s.replyComposer}><div><p style={s.replyComposerTitle}>Replying to @{replyingTo.username || replyingTo.nickname}</p><p style={s.replyComposerText}>{replyingTo.content}</p></div><button type="button" style={s.actionBtn} onClick={() => setReplyingTo(null)}><X size={14} /></button></div>}
                 {isTypingRemote && <p style={s.typing}>Typing...</p>}
                 <div style={s.inputRow}>

@@ -208,7 +208,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     };
 
     const friendMap = useMemo(() => new Map(friends.map((f) => [f.id, f])), [friends]);
-    const chatIds = useMemo(() => new Set(dmConversations.map((c) => c.user?.id)), [dmConversations]);
+    const conversationMap = useMemo(() => new Map(dmConversations.map((c) => [c.user?.id, c])), [dmConversations]);
 
     const toggleSelectDm = (id: number) => {
         setSelectedDmIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -284,9 +284,10 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
                     {activeSidebarTab === "friends" && (
                         <div style={styles.listWrap}>
-                            {friends.filter((f) => chatIds.has(f.id)).map((f) => {
+                            {friends.map((f) => {
                                 const active = pathname.includes(`/dms/${f.id}`);
                                 const hasUnread = !!unreadCounts[f.id];
+                                const conv = conversationMap.get(f.id);
                                 return (
                                     <Link
                                         key={f.id}
@@ -304,7 +305,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                         <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
                                         <div style={styles.dmInfo}>
                                             <p style={{ ...styles.dmName, fontWeight: hasUnread ? 800 : 600 }}>{f.nickname}</p>
-                                            <p style={styles.dmLast}>@{f.username}</p>
+                                            <p style={styles.dmLast}>{conv?.last_message || `@${f.username}`}</p>
                                         </div>
                                         {!!unreadCounts[f.id] && <span style={styles.unreadBadge}>{unreadCounts[f.id] > 99 ? "99+" : unreadCounts[f.id]}</span>}
                                         <span style={{ ...styles.onlineDot, background: active ? "var(--success)" : "#8b93be", boxShadow: "none" }} />
