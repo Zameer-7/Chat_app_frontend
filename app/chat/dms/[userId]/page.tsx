@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Send, Edit2, Trash2, Check, X, Reply, Smile, ArrowLeft, Search, MoreVertical, Copy, Pin, Forward, Archive, BellOff, Mail } from "lucide-react";
+import { Send, Edit2, Trash2, Check, X, Reply, Smile, ArrowLeft, Search, MoreVertical, Copy, Pin, Forward, Archive, BellOff, Mail, Paperclip } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
@@ -193,9 +193,9 @@ export default function DMChatPage() {
                 <div style={s.headerInfo}>
                     <button style={s.toolBtn} onClick={() => router.push("/chat")}><ArrowLeft size={15} /></button>
                     <div style={s.avatarSmall}>{otherUser.nickname[0].toUpperCase()}</div>
-                    <div>
-                        <h2 style={s.roomName}>{otherUser.nickname}</h2>
-                        <span style={s.usernameSmall}>@{otherUser.username}</span>
+                    <div style={s.nameWrap}>
+                        <h2 style={s.roomName}>{otherUser.nickname || "User"}</h2>
+                        <span style={s.usernameSmall}>@{otherUser.username || "username"}</span>
                     </div>
                 </div>
                 <div style={s.headerStatus}>
@@ -281,6 +281,7 @@ export default function DMChatPage() {
                 {isTypingRemote && <p style={s.typing}>Typing...</p>}
                 <div style={s.inputRow}>
                     <button type="button" style={s.toolBtn} onClick={() => setShowEmoji((v) => !v)} title="Emoji"><Smile size={14} /></button>
+                    <button type="button" style={s.toolBtn} title="Attachment"><Paperclip size={14} /></button>
                     <input value={input} onChange={(e) => onInput(e.target.value)} disabled={blockedIds.includes(Number(userId))} placeholder={blockedIds.includes(Number(userId)) ? "You blocked this user" : `Message @${otherUser.nickname}`} style={s.input} autoFocus />
                     <input value={forwardTo} onChange={(e) => setForwardTo(e.target.value)} placeholder="Forward to user id" style={{ ...s.forwardInput }} />
                     <button type="submit" disabled={!input.trim() || blockedIds.includes(Number(userId))} style={{ ...s.sendBtn, opacity: input.trim() && !blockedIds.includes(Number(userId)) ? 1 : 0.45 }}><Send size={18} /></button>
@@ -295,8 +296,9 @@ const s: Record<string, React.CSSProperties> = {
     container: { display: "flex", flexDirection: "column", height: "100%", background: "radial-gradient(circle at 10% -10%, rgba(119,101,255,0.14), transparent 46%), var(--bg-base)" },
     header: { height: 70, padding: "0 1rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(140,148,204,0.2)" },
     headerInfo: { display: "flex", alignItems: "center", gap: 10 },
-    roomName: { fontWeight: 800, fontSize: "1rem" },
-    usernameSmall: { fontSize: "0.75rem", color: "var(--text-muted)" },
+    nameWrap: { display: "flex", flexDirection: "column", minWidth: 0 },
+    roomName: { fontWeight: 800, fontSize: "1rem", color: "var(--text-primary)", lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 },
+    usernameSmall: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 },
     headerStatus: { display: "flex", alignItems: "center", gap: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 999, display: "inline-block" },
     statusText: { fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 700 },
@@ -331,11 +333,11 @@ const s: Record<string, React.CSSProperties> = {
     replyComposerTitle: { fontSize: "0.73rem", fontWeight: 700, color: "#c7ccff" },
     replyComposerText: { fontSize: "0.78rem", color: "var(--text-muted)", maxWidth: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
     typing: { fontSize: "0.74rem", color: "#c0c6f6", marginLeft: 5 },
-    inputRow: { display: "flex", alignItems: "center", gap: 8, background: "rgba(18,24,45,0.78)", border: "1px solid rgba(140,148,204,0.25)", borderRadius: 999, padding: "0.35rem 0.4rem" },
-    toolBtn: { minWidth: 34, height: 34, borderRadius: 10, border: "1px solid rgba(140,148,204,0.26)", background: "rgba(15,20,36,0.7)", color: "#b9c0f7", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 11, fontWeight: 700 },
-    input: { flex: 1, background: "transparent", border: "none", borderRadius: 999, padding: "0.6rem 0.8rem", color: "var(--text-primary)", boxShadow: "none", outline: "none" },
+    inputRow: { display: "flex", alignItems: "center", gap: 6, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 999, padding: "0.32rem 0.38rem", minHeight: 46 },
+    toolBtn: { width: 34, height: 34, borderRadius: 999, border: "1px solid rgba(140,148,204,0.24)", background: "transparent", color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 },
+    input: { flex: 1, background: "transparent", border: "none", borderRadius: 999, padding: "0.62rem 0.35rem", color: "var(--text-primary)", boxShadow: "none", outline: "none", fontSize: "0.93rem" },
     forwardInput: { display: "none" },
-    sendBtn: { width: 38, height: 38, border: "1px solid rgba(170,160,255,0.45)", borderRadius: 999, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
+    sendBtn: { width: 36, height: 36, border: "none", borderRadius: 999, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, boxShadow: "0 8px 14px rgba(93,76,231,0.28)" },
     emojiWrap: { display: "flex", flexWrap: "wrap", gap: 6, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(13,18,34,0.75)", borderRadius: 12, padding: 8 },
     emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     menu: { position: "absolute", right: 0, top: 38, zIndex: 30, width: 170, borderRadius: 10, background: "rgba(15,20,36,0.95)", border: "1px solid rgba(140,148,204,0.3)", padding: 4 },
