@@ -47,17 +47,19 @@ export default function RoomChatPage() {
     const { messages, send, setMessages, connected } = useWebSocket(wsUrl);
 
     useEffect(() => {
-        // Load history
-        api.get(`/rooms/${roomId}/messages`).then((res) => {
-            setMessages(res.data.map((m: any) => ({
-                type: "message",
-                ...m,
-                user_nickname: m.user.nickname,
-                user_username: m.user.username
-            })));
+        api.post(`/rooms/${roomId}/join`).catch(() => {
+            // Ignore if already a member; backend handles idempotency.
+        }).finally(() => {
+            api.get(`/rooms/${roomId}/messages`).then((res) => {
+                setMessages(res.data.map((m: any) => ({
+                    type: "message",
+                    ...m,
+                    user_nickname: m.user.nickname,
+                    user_username: m.user.username
+                })));
+            });
+            api.get(`/rooms/${roomId}`).then((res) => setRoom(res.data));
         });
-        // Load room details
-        api.get(`/rooms/${roomId}`).then((res) => setRoom(res.data));
     }, [roomId, setMessages]);
 
     useEffect(() => {

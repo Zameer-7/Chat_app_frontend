@@ -20,6 +20,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const [friendUsername, setFriendUsername] = useState("");
     const [friendSuggestions, setFriendSuggestions] = useState<any[]>([]);
     const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+    const roomPath = (room: any) => `/chat/rooms/${room.room_id || room.id}`;
 
     const loadSidebarData = async () => {
         try {
@@ -85,7 +86,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
             setRooms([...rooms, res.data]);
             setShowCreateRoom(false);
             setRoomName("");
-            router.push(`/chat/rooms/${res.data.id}`);
+            router.push(roomPath(res.data));
         } catch (err: any) {
             alert(err.response?.data?.detail || "Failed to create room");
         }
@@ -200,8 +201,8 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                             {rooms.map(room => (
                                 <Link
                                     key={room.id}
-                                    href={`/chat/rooms/${room.id}`}
-                                    style={{ ...styles.navItem, background: pathname.includes(`/rooms/${room.id}`) ? "var(--bg-elevated)" : "transparent" }}
+                                    href={roomPath(room)}
+                                    style={{ ...styles.navItem, background: pathname.includes(`/rooms/${room.room_id || room.id}`) ? "var(--bg-elevated)" : "transparent" }}
                                 >
                                     <Hash size={18} color="var(--text-muted)" />
                                     <span>{room.name}</span>
