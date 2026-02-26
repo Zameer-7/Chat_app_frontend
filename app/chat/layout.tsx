@@ -288,7 +288,19 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                 const active = pathname.includes(`/dms/${f.id}`);
                                 const hasUnread = !!unreadCounts[f.id];
                                 return (
-                                    <Link key={f.id} href={`/chat/dms/${f.id}`} style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
+                                    <Link
+                                        key={f.id}
+                                        href={`/chat/dms/${f.id}`}
+                                        style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }}
+                                        onClick={(e) => {
+                                            if (selectionMode) {
+                                                e.preventDefault();
+                                                toggleSelectDm(f.id);
+                                                return;
+                                            }
+                                            if (isMobile) setSidebarOpen(false);
+                                        }}
+                                    >
                                         <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
                                         <div style={styles.dmInfo}>
                                             <p style={{ ...styles.dmName, fontWeight: hasUnread ? 800 : 600 }}>{f.nickname}</p>
@@ -305,9 +317,31 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                     {activeSidebarTab === "chats" && (
                         <div style={styles.listWrap}>
                             {dmConversations.map((conv) => (
-                                <Link key={conv.user.id} href={`/chat/dms/${conv.user.id}`} style={{ ...styles.navItem, ...(pathname.includes(`/dms/${conv.user.id}`) ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
+                                <Link
+                                    key={conv.user.id}
+                                    href={`/chat/dms/${conv.user.id}`}
+                                    style={{ ...styles.navItem, ...(pathname.includes(`/dms/${conv.user.id}`) ? styles.navItemActive : {}) }}
+                                    onClick={(e) => {
+                                        if (selectionMode) {
+                                            e.preventDefault();
+                                            toggleSelectDm(conv.user.id);
+                                            return;
+                                        }
+                                        if (isMobile) setSidebarOpen(false);
+                                    }}
+                                >
                                     {selectionMode && (
-                                        <input type="checkbox" checked={selectedDmIds.includes(conv.user.id)} onChange={(e) => { e.preventDefault(); toggleSelectDm(conv.user.id); }} style={styles.selectBox} />
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedDmIds.includes(conv.user.id)}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleSelectDm(conv.user.id);
+                                            }}
+                                            readOnly
+                                            style={styles.selectBox}
+                                        />
                                     )}
                                     <div style={styles.dmAvatar}>{conv.user.nickname[0]}</div>
                                     <div style={styles.dmInfo}>
