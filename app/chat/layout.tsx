@@ -12,6 +12,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const router = useRouter();
     const [rooms, setRooms] = useState<any[]>([]);
     const [dmConversations, setDmConversations] = useState<any[]>([]);
+    const [friends, setFriends] = useState<any[]>([]);
     const [showCreateRoom, setShowCreateRoom] = useState(false);
     const [roomName, setRoomName] = useState("");
     const [friendRequests, setFriendRequests] = useState<any[]>([]);
@@ -22,14 +23,16 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
     const loadSidebarData = async () => {
         try {
-            const [r, d, f] = await Promise.all([
+            const [r, d, f, fa] = await Promise.all([
                 api.get("/rooms"),
                 api.get("/dms"),
-                api.get("/friends/requests")
+                api.get("/friends/requests"),
+                api.get("/friends/all"),
             ]);
             setRooms(r.data);
             setDmConversations(d.data);
             setFriendRequests(f.data);
+            setFriends(fa.data);
         } catch (err) {
             console.error("Sidebar data load failed", err);
         }
@@ -91,11 +94,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const handleSendFriendRequest = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await api.post("/friends/requests", { username: friendUsername });
+            await api.post("/friends/requests", { username: friendUsername.trim().toLowerCase() });
             alert("Request sent!");
             setFriendUsername("");
             setFriendSuggestions([]);
             setShowAddFriend(false);
+            loadSidebarData();
         } catch (err: any) {
             alert(err.response?.data?.detail || "Failed to send request");
         }
@@ -152,7 +156,24 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                             </div>
                         )}
                         <div style={styles.dmList}>
+                            {friends.map((f) => {
+                                const conv = dmConversations.find((c) => c.user?.id === f.id);
+                                return (
+                                    <Link
+                                        key={f.id}
+                                        href={`/chat/dms/${f.id}`}
+                                        style={{ ...styles.navItem, background: pathname.includes(`/dms/${f.id}`) ? "var(--bg-elevated)" : "transparent" }}
+                                    >
+                                        <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
+                                        <div style={styles.dmInfo}>
+                                            <p style={styles.dmName}>{f.nickname}</p>
+                                            <p style={styles.dmLast}>{conv?.last_message || "Start chatting"}</p>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
                             {dmConversations.map(conv => (
+                                friends.some((f) => f.id === conv.user.id) ? null : (
                                 <Link
                                     key={conv.user.id}
                                     href={`/chat/dms/${conv.user.id}`}
@@ -164,6 +185,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                         <p style={styles.dmLast}>{conv.last_message}</p>
                                     </div>
                                 </Link>
+                                )
                             ))}
                         </div>
                     </div>
