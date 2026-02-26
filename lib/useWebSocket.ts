@@ -13,7 +13,13 @@ export function useWebSocket(url: string | null) {
 
     useEffect(() => {
         if (!url) return;
-        const ws = new WebSocket(url);
+        let ws: WebSocket;
+        try {
+            ws = new WebSocket(url);
+        } catch {
+            setConnected(false);
+            return;
+        }
         wsRef.current = ws;
 
         ws.onopen = () => setConnected(true);

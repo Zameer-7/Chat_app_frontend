@@ -7,8 +7,30 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
 
 const REPLY_PREFIX = /^\[\[reply:(.+?)\]\]\n?/;
-const REACTION_EMOJIS = ["❤️", "😂", "👍", "🔥"];
+const REACTION_EMOJIS = ["\u2764\uFE0F", "\u{1F602}", "\u{1F44D}", "\u{1F525}"];
 type ReplyMeta = { id: number; username: string; nickname: string; content: string };
+
+function getWsBase() {
+    const raw = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || "https://chat-app-backend-kmr3.onrender.com";
+    if (raw.startsWith("wss://") || raw.startsWith("ws://")) return raw;
+    if (raw.startsWith("https://")) return raw.replace("https://", "wss://");
+    if (raw.startsWith("http://")) return raw.replace("http://", "ws://");
+    return "wss://chat-app-backend-kmr3.onrender.com";
+}
+
+function safeReactions(value: unknown): Record<string, number[]> {
+    if (!value) return {};
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            return typeof parsed === "object" && parsed ? parsed as Record<string, number[]> : {};
+        } catch {
+            return {};
+        }
+    }
+    if (typeof value === "object") return value as Record<string, number[]>;
+    return {};
+}
 
 function parseMessageContent(raw: string) {
     const match = raw.match(REPLY_PREFIX);
@@ -45,6 +67,7 @@ export default function RoomChatPage() {
     const [addUsername, setAddUsername] = useState("");
     const [search, setSearch] = useState("");
     const [forwardToRoom, setForwardToRoom] = useState("");
+    const [loadError, setLoadError] = useState("");
     const touchStartRef = useRef<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -53,14 +76,19 @@ export default function RoomChatPage() {
     const isHost = room?.created_by === user?.id;
 
     const loadRoomData = async () => {
-        const [msgRes, roomRes, onlineRes] = await Promise.all([api.get(`/rooms/${roomId}/messages`), api.get(`/rooms/${roomId}`), api.get(`/rooms/${roomId}/online`)]);
-        setMessages(msgRes.data.map((m: any) => ({ type: "message", ...m, user_nickname: m.user.nickname, user_username: m.user.username })));
-        setRoom(roomRes.data);
-        setOnlineIds(onlineRes.data.online_user_ids || []);
+        try {
+            const [msgRes, roomRes, onlineRes] = await Promise.all([api.get(`/rooms/${roomId}/messages`), api.get(`/rooms/${roomId}`), api.get(`/rooms/${roomId}/online`)]);
+            setMessages(msgRes.data.map((m: any) => ({ type: "message", ...m, user_nickname: m.user.nickname, user_username: m.user.username })));
+            setRoom(roomRes.data);
+            setOnlineIds(onlineRes.data.online_user_ids || []);
+            setLoadError("");
+        } catch (err: any) {
+            setLoadError(err?.response?.data?.detail || "Failed to load room");
+        }
     };
 
     useEffect(() => {
-        api.post(`/rooms/${roomId}/join`).catch(() => {}).finally(loadRoomData);
+        api.post(`/rooms/${roomId}/join`).catch(() => {}).finally(() => { loadRoomData(); });
     }, [roomId, setMessages]);
 
     useEffect(() => {
@@ -120,7 +148,7 @@ export default function RoomChatPage() {
     const handleDeleteRoom = async () => { await api.delete(`/rooms/${roomId}`); router.push("/chat"); };
     const handleLeave = async () => { await api.delete(`/rooms/${roomId}/leave`); router.push("/chat"); };
 
-    if (!room) return <div style={s.center}>Loading room...</div>;
+    if (!room) return <div style={s.center}>{loadError || "Loading room..."}</div>;
 
     const shareCopy = async () => {
         const link = `${window.location.origin}/chat/rooms/${room.room_id || room.id}`;
@@ -166,7 +194,7 @@ export default function RoomChatPage() {
                             const isMe = m.user_id === user?.id;
                             if (m.type === "system") return <div key={i} style={s.systemMsg}>{m.content}</div>;
                             const parsed = parseMessageContent(String(m.content || ""));
-                            const reactions = JSON.parse(m.reactions || "{}");
+                            const reactions = safeReactions(m.reactions);
                             return (
                                 <div key={`${m.id}-${i}`} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row" }}>
                                     <div style={{ ...s.avatar, background: isMe ? "linear-gradient(135deg,var(--accent),var(--accent-2))" : "#242d52" }}>{String(m.user_nickname || "?")[0].toUpperCase()}</div>
@@ -234,7 +262,7 @@ export default function RoomChatPage() {
                     <input value={forwardToRoom} onChange={(e) => setForwardToRoom(e.target.value)} placeholder="Room code" style={{ ...s.input, maxWidth: 120 }} />
                     <button type="submit" disabled={!input.trim()} style={{ ...s.sendBtn, opacity: input.trim() ? 1 : 0.45 }}><Send size={18} /></button>
                 </div>
-                {showEmoji && <div style={s.emojiWrap}>{["😀", "😂", "😍", "🥳", "🔥", "👍", "🙏", "❤️", "😎", "🤝", "🎉", "🚀", "😅", "😢", "🤔", "🙌"].map((e) => <button key={e} type="button" style={s.emojiBtn} onClick={() => setInput((p) => `${p}${e}`)}>{e}</button>)}</div>}
+                {showEmoji && <div style={s.emojiWrap}>{["\u{1F600}", "\u{1F602}", "\u{1F60D}", "\u{1F973}", "\u{1F525}", "\u{1F44D}", "\u{1F64F}", "\u2764\uFE0F", "\u{1F60E}", "\u{1F91D}", "\u{1F389}", "\u{1F680}", "\u{1F605}", "\u{1F622}", "\u{1F914}", "\u{1F64C}"].map((e) => <button key={e} type="button" style={s.emojiBtn} onClick={() => setInput((p) => `${p}${e}`)}>{e}</button>)}</div>}
             </form>
         </div>
     );
@@ -304,3 +332,5 @@ const s: Record<string, React.CSSProperties> = {
     emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
 };
+
+
