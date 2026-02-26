@@ -167,6 +167,12 @@ export default function DMChatPage() {
         setShowMenu(false);
     };
 
+    const unblockUser = async () => {
+        await api.delete(`/users/block/${userId}`);
+        setBlockedIds((prev) => prev.filter((id) => id !== Number(userId)));
+        setShowMenu(false);
+    };
+
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         return (messages as any[]).filter((m) => m.type === "dm" && (!q || String(m.content || "").toLowerCase().includes(q)));
@@ -203,7 +209,9 @@ export default function DMChatPage() {
                                 <button style={s.menuBtn} onClick={() => setPref({ is_muted: true })}><BellOff size={13} /> Mute</button>
                                 <button style={s.menuBtn} onClick={() => setPref({ marked_unread: true })}><Mail size={13} /> Mark Unread</button>
                                 <button style={s.menuBtn} onClick={clearChat}><Trash2 size={13} /> Clear Chat</button>
-                                <button style={{ ...s.menuBtn, color: "#ff99aa" }} onClick={blockUser}>Block User</button>
+                                {blockedIds.includes(Number(userId))
+                                    ? <button style={{ ...s.menuBtn, color: "#9ee6b2" }} onClick={unblockUser}>Unblock User</button>
+                                    : <button style={{ ...s.menuBtn, color: "#ff99aa" }} onClick={blockUser}>Block User</button>}
                             </div>
                         )}
                     </div>
