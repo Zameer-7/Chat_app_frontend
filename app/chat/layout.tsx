@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Settings, LogOut, Plus, Search, UserCheck, Clock, AtSign, Menu, X, Crown } from "lucide-react";
+import { Settings, LogOut, Plus, Search, UserCheck, Clock, AtSign, Menu, X, Crown, CheckSquare, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 
@@ -25,8 +25,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
     const [isMobile, setIsMobile] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedDmIds, setSelectedDmIds] = useState<number[]>([]);
+    const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
+    const [lastDmAt, setLastDmAt] = useState<Record<number, string>>({});
+    const [toasts, setToasts] = useState<Array<{ id: string; userId?: number; route?: string; title: string; body: string }>>([]);
 
     const roomPath = (room: any) => `/chat/rooms/${room.room_id || room.id}`;
+    const activeDmId = pathname.startsWith("/chat/dms/") ? Number(pathname.split("/").pop()) : null;
 
     const loadSidebarData = async () => {
         try {
@@ -50,6 +56,11 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     }, [user, pathname]);
 
     useEffect(() => {
+        if (!activeDmId) return;
+        setUnreadCounts((prev) => ({ ...prev, [activeDmId]: 0 }));
+    }, [activeDmId]);
+
+    useEffect(() => {
         if (!loading && !user) router.replace("/login");
     }, [loading, user, router]);
 
@@ -63,6 +74,52 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         window.addEventListener("resize", onResize);
         return () => window.removeEventListener("resize", onResize);
     }, []);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission().catch(() => {});
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!user) return;
+        const interval = setInterval(async () => {
+            try {
+                const res = await api.get("/dms");
+                const conversations = Array.isArray(res.data) ? res.data : [];
+                setDmConversations(conversations);
+                setUnreadCounts((prev) => {
+                    const next = { ...prev };
+                    const nextLast = { ...lastDmAt };
+                    for (const conv of conversations) {
+                        const uid = conv?.user?.id;
+                        if (!uid || !conv?.last_at) continue;
+                        const last = String(conv.last_at);
+                        if (!nextLast[uid]) {
+                            nextLast[uid] = last;
+                            continue;
+                        }
+                        if (nextLast[uid] !== last && activeDmId !== uid) {
+                            next[uid] = Math.min((next[uid] || 0) + 1, 999);
+                            const toastId = `${uid}-${Date.now()}`;
+                            setToasts((t) => [...t, { id: toastId, userId: uid, route: `/chat/dms/${uid}`, title: conv.user.nickname, body: conv.last_message || "New message" }]);
+                            setTimeout(() => setToasts((t) => t.filter((x) => x.id !== toastId)), 4200);
+                            if (typeof document !== "undefined" && document.hidden && "Notification" in window && Notification.permission === "granted") {
+                                try {
+                                    new Notification(conv.user.nickname, { body: conv.last_message || "New message" });
+                                } catch {}
+                            }
+                        }
+                        nextLast[uid] = last;
+                    }
+                    setLastDmAt(nextLast);
+                    return next;
+                });
+            } catch {}
+        }, 6000);
+        return () => clearInterval(interval);
+    }, [user, activeDmId, lastDmAt]);
 
     useEffect(() => {
         if (!showAddFriend) {
@@ -96,6 +153,20 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         try {
             const res = await api.post("/rooms", { name: roomName });
             setRooms((prev) => [...prev, res.data]);
+            const roomCode = res.data?.room_id || res.data?.id;
+            if (roomCode) {
+                const toastId = `room-${Date.now()}`;
+                setToasts((t) => [
+                    ...t,
+                    {
+                        id: toastId,
+                        route: roomPath(res.data),
+                        title: "Room created",
+                        body: `Code: ${roomCode}`,
+                    },
+                ]);
+                setTimeout(() => setToasts((t) => t.filter((x) => x.id !== toastId)), 4200);
+            }
             setShowCreateRoom(false);
             setRoomName("");
             router.push(roomPath(res.data));
@@ -130,6 +201,23 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
     const friendMap = useMemo(() => new Map(friends.map((f) => [f.id, f])), [friends]);
 
+    const toggleSelectDm = (id: number) => {
+        setSelectedDmIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    };
+
+    const bulkDeleteChats = async () => {
+        if (selectedDmIds.length === 0) return;
+        if (!confirm(`Delete ${selectedDmIds.length} selected chat(s)?`)) return;
+        try {
+            await api.post("/dms/conversations/bulk-delete", selectedDmIds);
+            setSelectionMode(false);
+            setSelectedDmIds([]);
+            loadSidebarData();
+        } catch (err: any) {
+            alert(err.response?.data?.detail || "Failed to delete selected chats");
+        }
+    };
+
     if (loading || !user) return <div style={styles.bootScreen}>Loading...</div>;
 
     return (
@@ -157,7 +245,15 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                     <div style={styles.sectionLabel}>Friends</div>
                     <div style={styles.actionsRow}>
                         <button onClick={() => setShowAddFriend(true)} style={styles.secondaryBtn}><Search size={14} /> Add Friend</button>
+                        <button onClick={() => { setSelectionMode((v) => !v); setSelectedDmIds([]); }} style={styles.secondaryBtn}><CheckSquare size={14} /> Select</button>
                     </div>
+                    {selectionMode && (
+                        <div style={styles.selectionBar}>
+                            <span style={styles.selectionText}>{selectedDmIds.length} selected</span>
+                            <button onClick={bulkDeleteChats} style={styles.dangerBtn}><Trash2 size={14} /> Delete</button>
+                            <button onClick={() => { setSelectionMode(false); setSelectedDmIds([]); }} style={styles.secondaryBtn}>Cancel</button>
+                        </div>
+                    )}
 
                     {friendRequests.length > 0 && (
                         <div style={styles.requests}>
@@ -177,11 +273,15 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                             const active = pathname.includes(`/dms/${f.id}`);
                             return (
                                 <Link key={f.id} href={`/chat/dms/${f.id}`} style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
+                                    {selectionMode && (
+                                        <input type="checkbox" checked={selectedDmIds.includes(f.id)} onChange={(e) => { e.preventDefault(); toggleSelectDm(f.id); }} style={styles.selectBox} />
+                                    )}
                                     <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
                                     <div style={styles.dmInfo}>
-                                        <p style={styles.dmName}>{f.nickname}</p>
+                                        <p style={{ ...styles.dmName, fontWeight: unreadCounts[f.id] ? 800 : 600 }}>{f.nickname}</p>
                                         <p style={styles.dmLast}>{conv?.last_message || "Start chatting"}</p>
                                     </div>
+                                    {!!unreadCounts[f.id] && <span style={styles.unreadBadge}>{unreadCounts[f.id] > 99 ? "99+" : unreadCounts[f.id]}</span>}
                                     <span style={styles.onlineDot} />
                                 </Link>
                             );
@@ -189,11 +289,15 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         {dmConversations.map((conv) =>
                             friendMap.has(conv.user.id) ? null : (
                                 <Link key={conv.user.id} href={`/chat/dms/${conv.user.id}`} style={{ ...styles.navItem, ...(pathname.includes(`/dms/${conv.user.id}`) ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
+                                    {selectionMode && (
+                                        <input type="checkbox" checked={selectedDmIds.includes(conv.user.id)} onChange={(e) => { e.preventDefault(); toggleSelectDm(conv.user.id); }} style={styles.selectBox} />
+                                    )}
                                     <div style={styles.dmAvatar}>{conv.user.nickname[0]}</div>
                                     <div style={styles.dmInfo}>
-                                        <p style={styles.dmName}>{conv.user.nickname}</p>
+                                        <p style={{ ...styles.dmName, fontWeight: unreadCounts[conv.user.id] ? 800 : 600 }}>{conv.user.nickname}</p>
                                         <p style={styles.dmLast}>{conv.last_message}</p>
                                     </div>
+                                    {!!unreadCounts[conv.user.id] && <span style={styles.unreadBadge}>{unreadCounts[conv.user.id] > 99 ? "99+" : unreadCounts[conv.user.id]}</span>}
                                 </Link>
                             )
                         )}
@@ -273,6 +377,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                     </div>
                 </div>
             )}
+            <div style={styles.toastWrap}>
+                {toasts.map((t) => (
+                    <button key={t.id} style={styles.toast} onClick={() => t.route && router.push(t.route)}>
+                        <p style={styles.toastTitle}>{t.title}</p>
+                        <p style={styles.toastBody}>{t.body}</p>
+                    </button>
+                ))}
+            </div>
         </div>
     );
 }
@@ -296,16 +408,21 @@ const styles: Record<string, React.CSSProperties> = {
     sectionLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700, marginBottom: 8, padding: "0 0.4rem" },
     actionsRow: { display: "flex", gap: 8, marginBottom: 10 },
     secondaryBtn: { width: "100%", display: "flex", gap: 6, alignItems: "center", justifyContent: "center", background: "rgba(119,101,255,0.12)", color: "#ccd0ff", border: "1px solid rgba(119,101,255,0.35)", borderRadius: 10, padding: "0.56rem 0.7rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" },
+    selectionBar: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
+    selectionText: { fontSize: "0.78rem", color: "var(--text-muted)", minWidth: 70 },
+    dangerBtn: { display: "flex", gap: 6, alignItems: "center", justifyContent: "center", background: "rgba(239,79,111,0.14)", color: "#ff9fb2", border: "1px solid rgba(239,79,111,0.45)", borderRadius: 10, padding: "0.56rem 0.7rem", fontWeight: 600, cursor: "pointer" },
     primaryCta: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 },
     listWrap: { display: "flex", flexDirection: "column", gap: 6 },
     navItem: { position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "0.62rem 0.75rem", borderRadius: 12, textDecoration: "none", color: "var(--text-muted)", fontSize: "0.9rem", transition: "all 0.25s ease", border: "1px solid transparent" },
     navItemActive: { color: "#fff", background: "rgba(119,101,255,0.17)", borderColor: "rgba(119,101,255,0.42)", boxShadow: "inset 3px 0 0 0 var(--accent)" },
     roomHash: { width: 20, height: 20, borderRadius: 7, background: "rgba(119,101,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 },
     dmAvatar: { width: 24, height: 24, borderRadius: 8, background: "rgba(119,101,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", fontWeight: 700, flexShrink: 0 },
+    selectBox: { width: 14, height: 14 },
     dmInfo: { overflow: "hidden", flex: 1 },
     dmName: { fontWeight: 600, fontSize: "0.85rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
     dmLast: { fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
     onlineDot: { width: 8, height: 8, borderRadius: 99, background: "var(--success)", boxShadow: "0 0 0 4px rgba(37,213,106,0.15)" },
+    unreadBadge: { minWidth: 18, height: 18, borderRadius: 99, padding: "0 5px", background: "#ef4f6f", color: "#fff", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: "auto" },
     requests: { background: "rgba(119,101,255,0.08)", borderRadius: 12, padding: 9, marginBottom: 10, border: "1px dashed rgba(119,101,255,0.42)" },
     smallTitle: { fontSize: "0.66rem", fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 4, color: "#bfc4ff" },
     reqItem: { display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.8rem", padding: "4px 0" },
@@ -328,4 +445,8 @@ const styles: Record<string, React.CSSProperties> = {
     suggestUser: { fontSize: "0.8rem", color: "#9ca3af" },
     modalActions: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: "1.2rem" },
     cancelBtn: { background: "none", border: "none", color: "#b0b6de", cursor: "pointer", fontSize: "0.92rem", fontWeight: 600 },
+    toastWrap: { position: "fixed", right: 16, bottom: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 200 },
+    toast: { minWidth: 240, maxWidth: 320, borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(17,24,45,0.95)", color: "#fff", padding: "0.65rem 0.75rem", textAlign: "left", cursor: "pointer", animation: "fadeInFast 0.2s ease" },
+    toastTitle: { fontSize: "0.84rem", fontWeight: 700, marginBottom: 2 },
+    toastBody: { fontSize: "0.78rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
 };

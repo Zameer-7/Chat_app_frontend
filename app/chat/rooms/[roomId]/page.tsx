@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Send, Hash, Users, Edit2, Trash2, Check, X, Share2, Reply, SmilePlus, Paperclip, MoreHorizontal, Crown, UserX, DoorOpen, Flag } from "lucide-react";
+import { Send, Hash, Users, Edit2, Trash2, Check, X, Share2, Reply, SmilePlus, MoreHorizontal, Crown, UserX, DoorOpen, Flag, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
@@ -46,6 +46,9 @@ export default function RoomChatPage() {
     const [showMembers, setShowMembers] = useState(false);
     const [showRoomMenu, setShowRoomMenu] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
+    const [showEmoji, setShowEmoji] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const touchStartRef = useRef<number | null>(null);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -78,6 +81,14 @@ export default function RoomChatPage() {
     useEffect(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }, [messages]);
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") router.push("/chat");
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [router]);
 
     const handleInputChange = (value: string) => {
         setInput(value);
@@ -163,7 +174,7 @@ export default function RoomChatPage() {
             await api.delete(`/rooms/${roomId}`);
             router.push("/chat");
         } catch (err: any) {
-            alert(err.response?.data?.detail || "Failed to delete room");
+            alert(err.response?.data?.detail || "Failed to delete room. Redeploy backend latest commit and retry.");
         }
     };
 
@@ -178,10 +189,29 @@ export default function RoomChatPage() {
 
     if (!room) return <div style={s.center}>Loading room...</div>;
 
+    const addEmoji = (emoji: string) => setInput((prev) => `${prev}${emoji}`);
+    const shareCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(room.share_link || window.location.href);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1400);
+        } catch {}
+    };
+
     return (
-        <div style={s.container}>
+        <div
+            style={s.container}
+            onTouchStart={(e) => { touchStartRef.current = e.changedTouches[0]?.clientX ?? null; }}
+            onTouchEnd={(e) => {
+                if (touchStartRef.current == null) return;
+                const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartRef.current;
+                if (dx > 80) router.push("/chat");
+                touchStartRef.current = null;
+            }}
+        >
             <header style={s.header} className="glass">
                 <div style={s.headerLeft}>
+                    <button style={s.iconBtn} onClick={() => router.push("/chat")} title="Back"><ArrowLeft size={16} /></button>
                     <div style={s.roomBadge}><Hash size={16} /></div>
                     <div>
                         <h2 style={s.roomName}>{room.name}</h2>
@@ -194,7 +224,7 @@ export default function RoomChatPage() {
                 </div>
 
                 <div style={s.headerActions}>
-                    <button style={s.iconBtn} onClick={() => navigator.clipboard.writeText(room.share_link || window.location.href)} title="Copy room link"><Share2 size={16} /></button>
+                    <button style={s.iconBtn} onClick={shareCopy} title="Copy room link">{copied ? <Check size={16} /> : <Share2 size={16} />}</button>
                     <button style={s.iconBtn} onClick={() => setShowMembers((v) => !v)} title="Members"><Users size={16} /></button>
                     <span style={s.memberCount}>{room.members?.length || 0}</span>
                     <div style={{ position: "relative" }}>
@@ -256,7 +286,7 @@ export default function RoomChatPage() {
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
+                                            <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                                                 {parsed.reply && (
                                                     <div style={s.replyPreview}>
                                                         <p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p>
@@ -308,12 +338,17 @@ export default function RoomChatPage() {
                 )}
                 {isTyping && <p style={s.typing}>You are typing...</p>}
                 <div style={s.inputRow}>
-                    <button type="button" style={s.toolBtn}><SmilePlus size={16} /></button>
-                    <button type="button" style={s.toolBtn}><Paperclip size={16} /></button>
-                    <button type="button" style={s.toolBtn}>GIF</button>
+                    <button type="button" style={s.toolBtn} onClick={() => setShowEmoji((v) => !v)}><SmilePlus size={16} /></button>
                     <input value={input} onChange={(e) => handleInputChange(e.target.value)} placeholder={`Message #${room.name}`} style={s.input} autoFocus />
                     <button type="submit" disabled={!input.trim()} style={{ ...s.sendBtn, opacity: input.trim() ? 1 : 0.45 }}><Send size={18} /></button>
                 </div>
+                {showEmoji && (
+                    <div style={s.emojiWrap}>
+                        {["😀","😂","😍","🥳","🔥","👍","🙏","❤️","😎","🤝","🎉","🚀","😅","😢","🤔","🙌"].map((e) => (
+                            <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>
+                        ))}
+                    </div>
+                )}
             </form>
         </div>
     );
@@ -378,5 +413,7 @@ const s: Record<string, React.CSSProperties> = {
     toolBtn: { minWidth: 34, height: 34, borderRadius: 10, border: "1px solid rgba(140,148,204,0.26)", background: "rgba(15,20,36,0.7)", color: "#b9c0f7", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 11, fontWeight: 700 },
     input: { flex: 1, background: "#11172b", border: "1px solid #2f3b66", borderRadius: 999, padding: "0.72rem 1rem", color: "#fff" },
     sendBtn: { width: 38, height: 38, border: "1px solid rgba(170,160,255,0.45)", borderRadius: 999, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
+    emojiWrap: { display: "flex", flexWrap: "wrap", gap: 6, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(13,18,34,0.75)", borderRadius: 12, padding: 8 },
+    emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
 };
