@@ -21,6 +21,21 @@ function getApiErrorMessage(err: unknown, fallback: string): string {
     return fallback;
 }
 
+async function postWithRetry(path: string, payload: unknown, retries = 2) {
+    let lastErr: unknown;
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await axios.post(`${API_URL}${path}`, payload, { timeout: 60000 });
+        } catch (err) {
+            lastErr = err;
+            if (i < retries) {
+                await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+            }
+        }
+    }
+    throw lastErr;
+}
+
 interface User {
     id: number;
     username: string;
@@ -104,27 +119,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const login = async (email: string, password: string) => {
         try {
-            const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+            const res = await postWithRetry("/auth/login", { email, password });
             const tkn = res.data.access_token;
             localStorage.setItem("token", tkn);
             setToken(tkn);
             await fetchMe(tkn);
         } catch (err) {
             console.error("Login request failed:", err);
-            throw new Error(getApiErrorMessage(err, "Login failed. Check your credentials."));
+            throw new Error(getApiErrorMessage(err, "Network issue or server waking up. Please retry in 10-20 seconds."));
         }
     };
 
     const signup = async (username: string, nickname: string, email: string, password: string) => {
         try {
-            const res = await axios.post(`${API_URL}/auth/signup`, { username, nickname, email, password });
+            const res = await postWithRetry("/auth/signup", { username, nickname, email, password });
             const tkn = res.data.access_token;
             localStorage.setItem("token", tkn);
             setToken(tkn);
             await fetchMe(tkn);
         } catch (err) {
             console.error("Signup request failed:", err);
-            throw new Error(getApiErrorMessage(err, "Signup failed. Try a different username/email."));
+            throw new Error(getApiErrorMessage(err, "Network issue or server waking up. Please retry in 10-20 seconds."));
         }
     };
 

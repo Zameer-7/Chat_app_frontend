@@ -32,7 +32,7 @@ export default function DMChatPage() {
     const { userId } = useParams();
     const router = useRouter();
     const { user, token } = useAuth();
-    const [otherUser, setOtherUser] = useState<any>(null);
+    const [otherUser, setOtherUser] = useState<any>({ nickname: "User", username: "user", show_online_status: true });
     const [input, setInput] = useState("");
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editValue, setEditValue] = useState("");
@@ -51,11 +51,10 @@ export default function DMChatPage() {
 
     useEffect(() => {
         (async () => {
-            const [dmRes, usersRes] = await Promise.all([api.get(`/dms/${userId}`), api.get("/dms/users/all")]);
+            const [dmRes, userRes] = await Promise.all([api.get(`/dms/${userId}`), api.get(`/users/${userId}`)]);
             const base = dmRes.data.map((m: any) => ({ type: "dm", ...m }));
             setMessages(base);
-            const found = (usersRes.data as any[]).find((u) => u.id === Number(userId));
-            if (found) setOtherUser(found);
+            setOtherUser(userRes.data);
             const unseenIds = base.filter((m: any) => m.sender_id === Number(userId) && !m.seen_at).map((m: any) => m.id);
             if (unseenIds.length) sendJson({ type: "seen", message_ids: unseenIds });
         })().catch(() => {});
@@ -68,7 +67,7 @@ export default function DMChatPage() {
             setIsTypingRemote(Boolean(latest.is_typing));
         }
         if (latest?.type === "presence") {
-            if (typeof latest.online === "boolean") setOnline(latest.online);
+            if (latest.user_id === Number(userId) && typeof latest.online === "boolean") setOnline(latest.online);
         }
         if (latest?.type === "seen" && Array.isArray(latest.message_ids)) {
             const ids = new Set(latest.message_ids as number[]);
@@ -169,7 +168,9 @@ export default function DMChatPage() {
         return (messages as any[]).filter((m) => m.type === "dm" && (!q || String(m.content || "").toLowerCase().includes(q)));
     }, [messages, search]);
 
-    if (!otherUser) return <div style={s.center}>Loading conversation...</div>;
+    const showOnline = otherUser?.show_online_status !== false;
+    const statusLabel = showOnline ? (online ? "Online" : "Last seen recently") : "Last seen recently";
+    const statusColor = showOnline ? (online ? "var(--success)" : "#8f96c6") : "#8f96c6";
     const addEmoji = (emoji: string) => setInput((prev) => `${prev}${emoji}`);
 
     return (
@@ -188,8 +189,8 @@ export default function DMChatPage() {
                     </div>
                 </div>
                 <div style={s.headerStatus}>
-                    <span className="pulse-dot" style={{ ...s.statusDot, background: online ? "var(--success)" : "var(--danger)" }} />
-                    <span style={s.statusText}>{online ? "Online" : `Last seen ${otherUser.last_seen_at ? new Date(otherUser.last_seen_at).toLocaleTimeString() : "recently"}`}</span>
+                    <span className={online && showOnline ? "pulse-dot" : ""} style={{ ...s.statusDot, background: statusColor }} />
+                    <span style={s.statusText}>{statusLabel}</span>
                     <div style={{ position: "relative" }}>
                         <button style={s.toolBtn} onClick={() => setShowMenu((v) => !v)}><MoreVertical size={14} /></button>
                         {showMenu && (
@@ -225,9 +226,7 @@ export default function DMChatPage() {
                                         {status && <span style={s.seenTag}>{status}</span>}
                                         <div style={s.msgActions}>
                                             {!m.is_deleted && !isEditing && <button onClick={() => setReplyingTo({ id: m.id, username: isMe ? user?.username || "" : otherUser.username || "", nickname: isMe ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) })} style={s.actionBtn}><Reply size={12} /></button>}
-                                            {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.actionBtn}><Copy size={12} /></button>}
-                                            {!m.is_deleted && <button onClick={() => pin(m.id)} style={s.actionBtn}><Pin size={12} /></button>}
-                                            {!m.is_deleted && <button onClick={() => forward(m.id)} style={s.actionBtn}><Forward size={12} /></button>}
+                                                {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.actionBtn}><Copy size={12} /></button>}
                                             {isMe && !m.is_deleted && !isEditing && <button onClick={() => startEdit(m)} style={s.actionBtn}><Edit2 size={12} /></button>}
                                             {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, false)} style={s.actionBtn}><Trash2 size={12} /></button>}
                                             {!m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, true)} style={s.actionBtn}>Me</button>}
@@ -249,6 +248,8 @@ export default function DMChatPage() {
                                                 {REACTION_EMOJIS.map((emoji) => (
                                                     <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji} {Array.isArray(reactions[emoji]) ? reactions[emoji].length : 0}</button>
                                                 ))}
+                                                {!m.is_deleted && <button onClick={() => pin(m.id)} style={s.reactionGhost}><Pin size={11} /></button>}
+                                                {!m.is_deleted && <button onClick={() => forward(m.id)} style={s.reactionGhost}><Forward size={11} /></button>}
                                             </div>
                                         </div>
                                     )}
@@ -265,7 +266,7 @@ export default function DMChatPage() {
                 <div style={s.inputRow}>
                     <button type="button" style={s.toolBtn} onClick={() => setShowEmoji((v) => !v)}><SmilePlus size={16} /></button>
                     <input value={input} onChange={(e) => onInput(e.target.value)} placeholder={`Message @${otherUser.nickname}`} style={s.input} autoFocus />
-                    <input value={forwardTo} onChange={(e) => setForwardTo(e.target.value)} placeholder="Forward id" style={{ ...s.input, maxWidth: 110 }} />
+                    <input value={forwardTo} onChange={(e) => setForwardTo(e.target.value)} placeholder="Forward to user id" style={{ ...s.forwardInput }} />
                     <button type="submit" disabled={!input.trim()} style={{ ...s.sendBtn, opacity: input.trim() ? 1 : 0.45 }}><Send size={18} /></button>
                 </div>
                 {showEmoji && <div style={s.emojiWrap}>{["😀", "😂", "😍", "🥳", "🔥", "👍", "🙏", "❤️", "😎", "🤝", "🎉", "🚀", "😅", "😢", "🤔", "🙌"].map((e) => <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>)}</div>}
@@ -304,6 +305,7 @@ const s: Record<string, React.CSSProperties> = {
     replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 },
     reactionRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
     reactionBtn: { border: "1px solid rgba(255,255,255,0.2)", background: "rgba(11,16,34,0.32)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.4rem", fontSize: 11, cursor: "pointer" },
+    reactionGhost: { border: "1px solid rgba(255,255,255,0.15)", background: "rgba(11,16,34,0.2)", color: "#d5dbff", borderRadius: 999, padding: "0.15rem 0.34rem", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" },
     editWrap: { width: "100%", borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(20,26,47,0.75)", padding: 8 },
     editInput: { background: "#12182e", border: "1px solid #6352f0", borderRadius: 10, padding: "0.52rem 0.65rem", color: "#fff" },
     editActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 },
@@ -312,9 +314,10 @@ const s: Record<string, React.CSSProperties> = {
     replyComposerTitle: { fontSize: "0.73rem", fontWeight: 700, color: "#c7ccff" },
     replyComposerText: { fontSize: "0.78rem", color: "var(--text-muted)", maxWidth: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
     typing: { fontSize: "0.74rem", color: "#c0c6f6", marginLeft: 5 },
-    inputRow: { display: "flex", alignItems: "center", gap: 8 },
+    inputRow: { display: "flex", alignItems: "center", gap: 8, background: "rgba(18,24,45,0.78)", border: "1px solid rgba(140,148,204,0.25)", borderRadius: 999, padding: "0.35rem 0.4rem" },
     toolBtn: { minWidth: 34, height: 34, borderRadius: 10, border: "1px solid rgba(140,148,204,0.26)", background: "rgba(15,20,36,0.7)", color: "#b9c0f7", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 11, fontWeight: 700 },
-    input: { flex: 1, background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 999, padding: "0.72rem 1rem", color: "var(--text-primary)" },
+    input: { flex: 1, background: "transparent", border: "none", borderRadius: 999, padding: "0.6rem 0.8rem", color: "var(--text-primary)", boxShadow: "none", outline: "none" },
+    forwardInput: { display: "none" },
     sendBtn: { width: 38, height: 38, border: "1px solid rgba(170,160,255,0.45)", borderRadius: 999, background: "linear-gradient(135deg,var(--accent),var(--accent-2))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     emojiWrap: { display: "flex", flexWrap: "wrap", gap: 6, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(13,18,34,0.75)", borderRadius: 12, padding: 8 },
     emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
