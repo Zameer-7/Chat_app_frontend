@@ -21,7 +21,7 @@ export default function LoginPage() {
             await login(email, password);
             router.replace("/chat");
         } catch (err: any) {
-            setError(err.response?.data?.detail || "Login failed. Check your credentials.");
+            setError(err?.message || "Login failed. Check your credentials.");
         } finally {
             setLoading(false);
         }

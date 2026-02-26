@@ -29,7 +29,7 @@ export default function SignupPage() {
             await signup(username.trim().toLowerCase(), nickname.trim(), email.trim(), password);
             router.replace("/chat");
         } catch (err: any) {
-            setError(err.response?.data?.detail || "Signup failed. Try a different username/email.");
+            setError(err?.message || "Signup failed. Try a different username/email.");
         } finally {
             setLoading(false);
         }

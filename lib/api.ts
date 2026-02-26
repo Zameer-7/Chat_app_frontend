@@ -1,7 +1,6 @@
 import axios from "axios";
 
-// Using a fallback for local development if env is not picked up
-const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const baseURL = process.env.NEXT_PUBLIC_API_URL || "https://chat-app-backend-kmr3.onrender.com";
 
 const api = axios.create({
     baseURL,

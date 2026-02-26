@@ -3,8 +3,21 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-// Using a fallback for local development if env is not picked up
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://chat-app-backend-kmr3.onrender.com";
+
+function getApiErrorMessage(err: unknown, fallback: string): string {
+    if (axios.isAxiosError(err)) {
+        const detail = err.response?.data?.detail;
+        if (typeof detail === "string") return detail;
+        if (Array.isArray(detail)) {
+            const first = detail[0];
+            if (typeof first === "string") return first;
+            if (first?.msg) return String(first.msg);
+        }
+        if (typeof err.message === "string" && err.message) return err.message;
+    }
+    return fallback;
+}
 
 interface User {
     id: number;
@@ -65,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await fetchMe(tkn);
         } catch (err) {
             console.error("Login request failed:", err);
-            throw err;
+            throw new Error(getApiErrorMessage(err, "Login failed. Check your credentials."));
         }
     };
 
@@ -78,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await fetchMe(tkn);
         } catch (err) {
             console.error("Signup request failed:", err);
-            throw err;
+            throw new Error(getApiErrorMessage(err, "Signup failed. Try a different username/email."));
         }
     };
 
