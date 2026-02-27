@@ -78,8 +78,15 @@ export default function RoomChatPage() {
 
     const loadRoomData = async () => {
         try {
-            const [msgRes, roomRes, onlineRes] = await Promise.all([api.get(`/rooms/${roomId}/messages`), api.get(`/rooms/${roomId}`), api.get(`/rooms/${roomId}/online`)]);
-            const rows = Array.isArray(msgRes.data) ? msgRes.data : [];
+            const [msgRes, roomRes, onlineRes] = await Promise.allSettled([
+                api.get(`/rooms/${roomId}/messages`),
+                api.get(`/rooms/${roomId}`),
+                api.get(`/rooms/${roomId}/online`),
+            ]);
+            if (msgRes.status !== "fulfilled" || roomRes.status !== "fulfilled") {
+                throw new Error("Failed to load room history");
+            }
+            const rows = Array.isArray(msgRes.value.data) ? msgRes.value.data : [];
             setMessages(
                 rows.map((m: any) => ({
                     type: m?.type || "message",
@@ -88,8 +95,12 @@ export default function RoomChatPage() {
                     user_username: m?.user?.username || m?.user_username || "unknown",
                 }))
             );
-            setRoom(roomRes.data);
-            setOnlineIds(onlineRes.data.online_user_ids || []);
+            setRoom(roomRes.value.data);
+            if (onlineRes.status === "fulfilled") {
+                setOnlineIds(onlineRes.value.data?.online_user_ids || []);
+            } else {
+                setOnlineIds([]);
+            }
             setLoadError("");
         } catch (err: any) {
             setLoadError(err?.response?.data?.detail || "Failed to load room");

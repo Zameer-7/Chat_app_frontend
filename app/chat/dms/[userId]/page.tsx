@@ -62,25 +62,42 @@ export default function DMChatPage() {
     useEffect(() => {
         (async () => {
             try {
-                const [dmRes, userRes, blockedRes] = await Promise.all([
+                const [dmRes, blockedRes, friendsRes, convRes] = await Promise.allSettled([
                     api.get(`/dms/${userId}`),
-                    api.get(`/users/${userId}`),
-                    api.get("/users/blocked")
+                    api.get("/users/blocked"),
+                    api.get("/friends/all"),
+                    api.get("/dms"),
                 ]);
 
-                const base = Array.isArray(dmRes.data) ? dmRes.data.map((m: any) => ({ type: "dm", ...m })) : [];
+                const base =
+                    dmRes.status === "fulfilled" && Array.isArray(dmRes.value.data)
+                        ? dmRes.value.data.map((m: any) => ({ type: "dm", ...m }))
+                        : [];
                 setMessages(base);
 
-                const fetchedUser = userRes?.data || {};
+                const rows =
+                    blockedRes.status === "fulfilled" && Array.isArray(blockedRes.value.data)
+                        ? blockedRes.value.data
+                        : [];
+                setBlockedIds(rows.map((b: any) => Number(b.blocked_id)).filter((n: number) => Number.isFinite(n)));
+
+                const friends =
+                    friendsRes.status === "fulfilled" && Array.isArray(friendsRes.value.data)
+                        ? friendsRes.value.data
+                        : [];
+                const convs =
+                    convRes.status === "fulfilled" && Array.isArray(convRes.value.data)
+                        ? convRes.value.data
+                        : [];
+                const fromFriends = friends.find((u: any) => Number(u.id) === Number(userId));
+                const fromConversations = convs.find((c: any) => Number(c?.user?.id) === Number(userId))?.user;
+                const fetchedUser = fromFriends || fromConversations || {};
                 setOtherUser({
                     nickname: fetchedUser.nickname || fetchedUser.username || "User",
                     username: fetchedUser.username || "user",
                     show_online_status: fetchedUser.show_online_status !== false,
-                    ...fetchedUser
+                    ...fetchedUser,
                 });
-
-                const rows = Array.isArray(blockedRes.data) ? blockedRes.data : [];
-                setBlockedIds(rows.map((b: any) => Number(b.blocked_id)).filter((n: number) => Number.isFinite(n)));
 
                 const unseenIds = base
                     .filter((m: any) => m.sender_id === Number(userId) && !m.seen_at)
