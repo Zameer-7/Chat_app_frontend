@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Send, Edit2, Trash2, Check, X, Reply, Smile, ArrowLeft, Search, MoreVertical, Copy, Pin, Forward, Archive, BellOff, Mail, Paperclip } from "lucide-react";
+import { Send, Edit2, Trash2, Check, X, Reply, Smile, ArrowLeft, Search, MoreVertical, Copy, Pin, Forward, Archive, BellOff, Mail } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/useWebSocket";
 import api from "@/lib/api";
@@ -300,11 +300,11 @@ export default function DMChatPage() {
                         const isMe = m.sender_id === user?.id;
                         const isEditing = editingId === m.id;
                         const parsed = parseMessageContent(String(m.content || ""));
-                        let statusIcon = "";
+                        let statusText = "";
                         if (isMe) {
-                            if (m.seen_at) statusIcon = "✓✓";
-                            else if (m.delivered_at) statusIcon = "✓✓";
-                            else if (connected) statusIcon = "✓";
+                            if (m.seen_at) statusText = "Seen";
+                            else if (m.delivered_at) statusText = "Delivered";
+                            else if (connected) statusText = "Sent";
                         }
                         const reactions = JSON.parse(m.reactions || "{}");
                         return (
@@ -313,7 +313,7 @@ export default function DMChatPage() {
                                         <div style={s.msgMeta}>
                                             <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                                             {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
-                                            {statusIcon && <span style={{ ...s.seenTag, color: m.seen_at ? "#4a9eff" : "#8f96c6" }}>{statusIcon}</span>}
+                                            {statusText && <span style={{ ...s.seenTag, color: m.seen_at ? "#4a9eff" : "#8f96c6" }}>{statusText}</span>}
                                         </div>
                                     {isEditing ? (
                                         <div style={s.editWrap}>
@@ -376,7 +376,6 @@ export default function DMChatPage() {
                 {isTypingRemote && <p style={s.typing}>Typing...</p>}
                 <div style={s.inputRow}>
                     <button type="button" style={s.toolBtn} onClick={() => setShowEmoji((v) => !v)} title="Emoji"><Smile size={14} /></button>
-                    <button type="button" style={s.toolBtn} title="Attachment"><Paperclip size={14} /></button>
                     <input value={input} onChange={(e) => onInput(e.target.value)} disabled={blockedIds.includes(Number(userId))} placeholder={blockedIds.includes(Number(userId)) ? "You blocked this user" : `Message @${otherUser.nickname}`} style={s.input} autoFocus />
                     <input value={forwardTo} onChange={(e) => setForwardTo(e.target.value)} placeholder="Forward to user id" style={{ ...s.forwardInput }} />
                     <button type="submit" disabled={!input.trim() || blockedIds.includes(Number(userId))} style={{ ...s.sendBtn, opacity: input.trim() && !blockedIds.includes(Number(userId)) ? 1 : 0.45 }}><Send size={18} /></button>

@@ -49,6 +49,14 @@ function buildMessageContent(body: string, reply: ReplyMeta | null) {
     return `[[reply:${encodeURIComponent(JSON.stringify(reply))}]]\n${body}`;
 }
 
+function safeDecode(value: string) {
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
+}
+
 export default function RoomChatPage() {
     const { roomId } = useParams();
     const router = useRouter();
@@ -70,19 +78,20 @@ export default function RoomChatPage() {
     const [loadError, setLoadError] = useState("");
     const [isLoadingRoom, setIsLoadingRoom] = useState(true);
     const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
+    const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number } | null>(null);
     const touchStartRef = useRef<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const parsedRoomId = Number(roomId);
-    const hasValidRoomId = Number.isFinite(parsedRoomId) && parsedRoomId > 0;
+    const rawRoomId = Array.isArray(roomId) ? roomId[0] : roomId;
+    const roomRef = safeDecode(String(rawRoomId || ""));
     const wsBase = getWsBase();
-    const wsUrl = token && hasValidRoomId ? `${wsBase}/ws/rooms/${parsedRoomId}?token=${token}` : null;
+    const wsUrl = token && roomRef ? `${wsBase}/ws/rooms/${encodeURIComponent(roomRef)}?token=${token}` : null;
     const { messages, send, sendJson, setMessages, connected } = useWebSocket(wsUrl);
     const isHost = room?.created_by === user?.id;
 
     const loadRoomData = async () => {
-        if (!hasValidRoomId) {
+        if (!roomRef) {
             setLoadError("Room not found");
             setIsLoadingRoom(false);
             return;
@@ -90,9 +99,9 @@ export default function RoomChatPage() {
         try {
             setIsLoadingRoom(true);
             const [msgRes, roomRes, onlineRes] = await Promise.allSettled([
-                api.get(`/rooms/${parsedRoomId}/messages`),
-                api.get(`/rooms/${parsedRoomId}`),
-                api.get(`/rooms/${parsedRoomId}/online`),
+                api.get(`/rooms/${encodeURIComponent(roomRef)}/messages`),
+                api.get(`/rooms/${encodeURIComponent(roomRef)}`),
+                api.get(`/rooms/${encodeURIComponent(roomRef)}/online`),
             ]);
             if (msgRes.status !== "fulfilled" || roomRes.status !== "fulfilled") {
                 throw new Error("Failed to load room history");
@@ -121,13 +130,13 @@ export default function RoomChatPage() {
     };
 
     useEffect(() => {
-        if (!hasValidRoomId) {
+        if (!roomRef) {
             setLoadError("Room not found");
             setIsLoadingRoom(false);
             return;
         }
-        api.post(`/rooms/${parsedRoomId}/join`).catch(() => {}).finally(() => { loadRoomData(); });
-    }, [parsedRoomId, hasValidRoomId, setMessages]);
+        api.post(`/rooms/${encodeURIComponent(roomRef)}/join`).catch(() => {}).finally(() => { loadRoomData(); });
+    }, [roomRef, setMessages]);
 
     useEffect(() => {
         if (!messages.length) return;
@@ -138,12 +147,12 @@ export default function RoomChatPage() {
 
     useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [messages]);
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { if (contextMenu) setContextMenu(null); else router.push("/chat"); } };
-        const onClick = () => setContextMenu(null);
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { if (contextMenu || openMessageMenuId) { setContextMenu(null); setOpenMessageMenuId(null); } else router.push("/chat"); } };
+        const onClick = () => { setContextMenu(null); setOpenMessageMenuId(null); };
         window.addEventListener("keydown", onKey);
         window.addEventListener("click", onClick);
         return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("click", onClick); };
-    }, [router, contextMenu]);
+    }, [router, contextMenu, openMessageMenuId]);
 
     const handleSend = async (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -152,7 +161,7 @@ export default function RoomChatPage() {
         const sentViaWs = send(content);
         if (!sentViaWs) {
             try {
-                const res = await api.post(`/rooms/${parsedRoomId}/messages`, { content });
+                const res = await api.post(`/rooms/${encodeURIComponent(roomRef)}/messages`, { content });
                 setMessages((prev) => [...(prev as any[]), { type: "message", ...res.data }]);
             } catch (err) {
                 console.error("Room send failed:", err);
@@ -193,17 +202,17 @@ export default function RoomChatPage() {
     };
     const copyMessage = async (m: any) => navigator.clipboard.writeText(parseMessageContent(String(m.content || "")).body);
 
-    const handleRemoveUser = async (memberUserId: number) => { await api.delete(`/rooms/${parsedRoomId}/members/${memberUserId}`); await loadRoomData(); };
-    const handleAddMember = async () => { if (!addUsername.trim()) return; await api.post(`/rooms/${parsedRoomId}/members/by-username/${addUsername.trim().toLowerCase()}`); setAddUsername(""); await loadRoomData(); };
-    const handleEndSession = async () => { await api.post(`/rooms/${parsedRoomId}/end`); router.push("/chat"); };
-    const handleDeleteRoom = async () => { await api.delete(`/rooms/${parsedRoomId}`); router.push("/chat"); };
-    const handleLeave = async () => { await api.delete(`/rooms/${parsedRoomId}/leave`); router.push("/chat"); };
+    const handleRemoveUser = async (memberUserId: number) => { await api.delete(`/rooms/${encodeURIComponent(roomRef)}/members/${memberUserId}`); await loadRoomData(); };
+    const handleAddMember = async () => { if (!addUsername.trim()) return; await api.post(`/rooms/${encodeURIComponent(roomRef)}/members/by-username/${addUsername.trim().toLowerCase()}`); setAddUsername(""); await loadRoomData(); };
+    const handleEndSession = async () => { await api.post(`/rooms/${encodeURIComponent(roomRef)}/end`); router.push("/chat"); };
+    const handleDeleteRoom = async () => { await api.delete(`/rooms/${encodeURIComponent(roomRef)}`); router.push("/chat"); };
+    const handleLeave = async () => { await api.delete(`/rooms/${encodeURIComponent(roomRef)}/leave`); router.push("/chat"); };
 
     if (isLoadingRoom) return <div style={s.center}>Loading room...</div>;
     if (!room) return <div style={s.center}>{loadError || "Room not found"}</div>;
 
     const shareCopy = async () => {
-        const link = `${window.location.origin}/chat/rooms/${room.room_id || room.id}`;
+        const link = `${window.location.origin}/chat/rooms/${room.id}`;
         await navigator.clipboard.writeText(link);
         setCopied(true);
         setTimeout(() => setCopied(false), 1400);
@@ -259,7 +268,12 @@ export default function RoomChatPage() {
                                         {editingId === m.id ? (
                                             <div style={s.editWrap}><input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus /><div style={s.editActions}><button onClick={() => handleEditSave(m.id)} style={s.actionBtn}><Check size={14} /></button><button onClick={() => setEditingId(null)} style={s.actionBtn}><X size={14} /></button></div></div>
                                         ) : (
-                                            <div style={s.messageWrap} onContextMenu={(e) => { if (m.is_deleted) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, messageId: m.id }); }}>
+                                            <div
+                                                style={s.messageWrap}
+                                                onContextMenu={(e) => { if (m.is_deleted) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, messageId: m.id }); }}
+                                                onMouseEnter={() => setHoveredMessageId(m.id)}
+                                                onMouseLeave={() => setHoveredMessageId((curr) => (curr === m.id ? null : curr))}
+                                            >
                                                 <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
                                                     {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
                                                     {parsed.body}
@@ -268,15 +282,15 @@ export default function RoomChatPage() {
                                                     <div style={s.reactionRow}>
                                                         {REACTION_EMOJIS.slice(0, 3).map((emoji) => <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>)}
                                                         <div style={{ position: "relative" }}>
-                                                            <button style={s.reactionGhost} onClick={() => setContextMenu((curr) => curr?.messageId === m.id ? null : { x: 0, y: 0, messageId: m.id })}><MoreHorizontal size={12} /></button>
-                                                            {contextMenu?.messageId === m.id && (
+                                                            <button style={s.reactionGhost} onClick={() => setOpenMessageMenuId((curr) => curr === m.id ? null : m.id)}><MoreHorizontal size={12} /></button>
+                                                            {openMessageMenuId === m.id && (
                                                                 <div style={s.msgMenu}>
-                                                                    <button style={s.menuItem} onClick={() => { setReplyingTo({ id: m.id, username: m.user_username || "", nickname: m.user_nickname || "User", content: parsed.body.slice(0, 120) }); setContextMenu(null); }}><Reply size={12} /> Reply</button>
-                                                                    <button style={s.menuItem} onClick={() => { copyMessage(m); setContextMenu(null); }}><Copy size={12} /> Copy</button>
-                                                                    <button style={s.menuItem} onClick={() => { pin(m.id); setContextMenu(null); }}><Pin size={12} /> Pin</button>
-                                                                    <button style={s.menuItem} onClick={() => { forward(m.id); setContextMenu(null); }}><Forward size={12} /> Forward</button>
-                                                                    {isMe && <button style={s.menuItem} onClick={() => { startEdit(m); setContextMenu(null); }}><Edit2 size={12} /> Edit</button>}
-                                                                    {isMe && <button style={{ ...s.menuItem, color: "#ff9fb2" }} onClick={() => { handleDelete(m.id); setContextMenu(null); }}><Trash2 size={12} /> Delete</button>}
+                                                                    <button style={s.menuItem} onClick={() => { setReplyingTo({ id: m.id, username: m.user_username || "", nickname: m.user_nickname || "User", content: parsed.body.slice(0, 120) }); setOpenMessageMenuId(null); }}><Reply size={12} /> Reply</button>
+                                                                    <button style={s.menuItem} onClick={() => { copyMessage(m); setOpenMessageMenuId(null); }}><Copy size={12} /> Copy</button>
+                                                                    <button style={s.menuItem} onClick={() => { pin(m.id); setOpenMessageMenuId(null); }}><Pin size={12} /> Pin</button>
+                                                                    <button style={s.menuItem} onClick={() => { forward(m.id); setOpenMessageMenuId(null); }}><Forward size={12} /> Forward</button>
+                                                                    {isMe && <button style={s.menuItem} onClick={() => { startEdit(m); setOpenMessageMenuId(null); }}><Edit2 size={12} /> Edit</button>}
+                                                                    {isMe && <button style={{ ...s.menuItem, color: "#ff9fb2" }} onClick={() => { handleDelete(m.id); setOpenMessageMenuId(null); }}><Trash2 size={12} /> Delete</button>}
                                                                 </div>
                                                             )}
                                                         </div>
