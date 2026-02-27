@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Settings, LogOut, Plus, Search, UserCheck, Clock, AtSign, Menu, X, Crown, CheckSquare, Trash2, Users, MessageCircle } from "lucide-react";
+import { Settings, LogOut, Plus, Search, UserCheck, Clock, AtSign, Menu, X, Crown, Users, MessageCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 
@@ -25,8 +25,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
     const [isMobile, setIsMobile] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [selectionMode, setSelectionMode] = useState(false);
-    const [selectedDmIds, setSelectedDmIds] = useState<number[]>([]);
     const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
     const [lastDmAt, setLastDmAt] = useState<Record<number, string>>({});
     const [toasts, setToasts] = useState<Array<{ id: string; userId?: number; route?: string; title: string; body: string }>>([]);
@@ -210,26 +208,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const friendMap = useMemo(() => new Map(friends.map((f) => [f.id, f])), [friends]);
     const conversationMap = useMemo(() => new Map(dmConversations.map((c) => [c.user?.id, c])), [dmConversations]);
 
-    const toggleSelectDm = (id: number) => {
-        setSelectedDmIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-    };
-
-    const bulkDeleteChats = async () => {
-        if (selectedDmIds.length === 0) return;
-        if (!confirm(`Delete ${selectedDmIds.length} selected chat(s)?`)) return;
-        try {
-            await api.post("/dms/conversations/bulk-delete", selectedDmIds);
-            if (activeDmId && selectedDmIds.includes(activeDmId)) {
-                router.push("/chat");
-            }
-            setSelectionMode(false);
-            setSelectedDmIds([]);
-            loadSidebarData();
-        } catch (err: any) {
-            alert(err.response?.data?.detail || "Failed to delete selected chats");
-        }
-    };
-
     if (loading || !user) return <div style={styles.bootScreen}>Loading...</div>;
 
     return (
@@ -258,16 +236,10 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         <button style={{ ...styles.tabBtn, ...(activeSidebarTab === "friends" ? styles.tabBtnActive : {}) }} onClick={() => setActiveSidebarTab("friends")}><Users size={13} /> Friends</button>
                         <button style={{ ...styles.tabBtn, ...(activeSidebarTab === "chats" ? styles.tabBtnActive : {}) }} onClick={() => setActiveSidebarTab("chats")}><MessageCircle size={13} /> Chats</button>
                     </div>
-                    <div style={styles.actionsRow}>
-                        <button onClick={() => setShowAddFriend(true)} style={styles.secondaryBtn}><Search size={14} /> Add Friend</button>
-                        {activeSidebarTab === "chats" && <button onClick={() => { setSelectionMode((v) => !v); setSelectedDmIds([]); }} style={styles.secondaryBtn}><CheckSquare size={14} /> Select</button>}
-                    </div>
-                    {activeSidebarTab === "chats" && selectionMode && (
-                        <div style={styles.selectionBar}>
-                            <span style={styles.selectionText}>{selectedDmIds.length} selected</span>
-                            <button onClick={bulkDeleteChats} style={styles.dangerBtn}><Trash2 size={14} /> Delete</button>
-                            <button onClick={() => { setSelectionMode(false); setSelectedDmIds([]); }} style={styles.secondaryBtn}>Cancel</button>
-                        </div>
+                    {activeSidebarTab === "friends" ? (
+                        <button onClick={() => setShowAddFriend(true)} className="btn-primary" style={styles.primaryCta}><Plus size={14} /> Add Friend</button>
+                    ) : (
+                        <button onClick={() => setShowCreateRoom(true)} className="btn-primary" style={styles.primaryCta}><Plus size={14} /> Create Room</button>
                     )}
 
                     {activeSidebarTab === "friends" && friendRequests.length > 0 && (
@@ -292,13 +264,9 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                     <Link
                                         key={f.id}
                                         href={`/chat/dms/${f.id}`}
+                                        className="chat-nav-item"
                                         style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }}
                                         onClick={(e) => {
-                                            if (selectionMode) {
-                                                e.preventDefault();
-                                                toggleSelectDm(f.id);
-                                                return;
-                                            }
                                             if (isMobile) setSidebarOpen(false);
                                         }}
                                     >
@@ -321,29 +289,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                 <Link
                                     key={conv.user.id}
                                     href={`/chat/dms/${conv.user.id}`}
+                                    className="chat-nav-item"
                                     style={{ ...styles.navItem, ...(pathname.includes(`/dms/${conv.user.id}`) ? styles.navItemActive : {}) }}
                                     onClick={(e) => {
-                                        if (selectionMode) {
-                                            e.preventDefault();
-                                            toggleSelectDm(conv.user.id);
-                                            return;
-                                        }
                                         if (isMobile) setSidebarOpen(false);
                                     }}
                                 >
-                                    {selectionMode && (
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedDmIds.includes(conv.user.id)}
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                toggleSelectDm(conv.user.id);
-                                            }}
-                                            readOnly
-                                            style={styles.selectBox}
-                                        />
-                                    )}
                                     <div style={styles.dmAvatar}>{conv.user.nickname[0]}</div>
                                     <div style={styles.dmInfo}>
                                         <p style={{ ...styles.dmName, fontWeight: unreadCounts[conv.user.id] ? 800 : 600 }}>{conv.user.nickname}</p>
@@ -357,12 +308,11 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                     )}
 
                     <div style={{ ...styles.sectionLabel, marginTop: "1.2rem" }}>Rooms</div>
-                    <button onClick={() => setShowCreateRoom(true)} className="btn-primary" style={styles.primaryCta}><Plus size={14} /> Create Room</button>
                     <div style={styles.listWrap}>
                         {rooms.map((room) => {
                             const active = pathname.includes(`/rooms/${room.room_id || room.id}`);
                             return (
-                                <Link key={room.id} href={roomPath(room)} style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
+                                <Link key={room.id} href={roomPath(room)} className="chat-nav-item" style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
                                     <div style={styles.roomHash}>#</div>
                                     <span>{room.name}</span>
                                     {room.created_by === user.id && <Crown size={12} color="#f7ce46" />}
@@ -450,7 +400,7 @@ const styles: Record<string, React.CSSProperties> = {
     sidebarMobile: { position: "fixed", left: 0, top: 0, bottom: 0 },
     sidebarOpen: { transform: "translateX(0)", opacity: 1 },
     sidebarClosed: { transform: "translateX(-100%)", opacity: 0 },
-    sidebarHeader: { padding: "1rem 1.1rem", borderBottom: "1px solid rgba(143,150,210,0.14)", display: "flex", alignItems: "center", justifyContent: "space-between" },
+    sidebarHeader: { margin: "0.7rem 0.7rem 0.4rem", padding: "0.85rem 0.9rem", border: "1px solid rgba(143,150,210,0.2)", borderRadius: 14, background: "rgba(20,26,47,0.46)", display: "flex", alignItems: "center", justifyContent: "space-between" },
     userBadge: { display: "flex", alignItems: "center", gap: 10 },
     avatar: { width: 38, height: 38, borderRadius: 12, background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.92rem", boxShadow: "0 8px 18px rgba(93,76,231,0.35)" },
     userInfo: { display: "flex", flexDirection: "column" },
@@ -462,18 +412,12 @@ const styles: Record<string, React.CSSProperties> = {
     tabRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 },
     tabBtn: { border: "1px solid rgba(119,101,255,0.28)", background: "rgba(119,101,255,0.08)", color: "#cdd2ff", borderRadius: 10, padding: "0.5rem 0.6rem", fontWeight: 700, fontSize: "0.8rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer" },
     tabBtnActive: { background: "linear-gradient(135deg, rgba(119,101,255,0.42), rgba(93,76,231,0.32))", color: "#fff", borderColor: "rgba(166,154,255,0.42)" },
-    actionsRow: { display: "flex", gap: 8, marginBottom: 10 },
-    secondaryBtn: { width: "100%", display: "flex", gap: 6, alignItems: "center", justifyContent: "center", background: "rgba(119,101,255,0.12)", color: "#ccd0ff", border: "1px solid rgba(119,101,255,0.35)", borderRadius: 10, padding: "0.56rem 0.7rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" },
-    selectionBar: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
-    selectionText: { fontSize: "0.78rem", color: "var(--text-muted)", minWidth: 70 },
-    dangerBtn: { display: "flex", gap: 6, alignItems: "center", justifyContent: "center", background: "rgba(239,79,111,0.14)", color: "#ff9fb2", border: "1px solid rgba(239,79,111,0.45)", borderRadius: 10, padding: "0.56rem 0.7rem", fontWeight: 600, cursor: "pointer" },
     primaryCta: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 },
     listWrap: { display: "flex", flexDirection: "column", gap: 6 },
-    navItem: { position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "0.62rem 0.75rem", borderRadius: 12, textDecoration: "none", color: "var(--text-muted)", fontSize: "0.9rem", transition: "all 0.25s ease", border: "1px solid transparent" },
-    navItemActive: { color: "#fff", background: "rgba(119,101,255,0.17)", borderColor: "rgba(119,101,255,0.42)", boxShadow: "inset 3px 0 0 0 var(--accent)" },
+    navItem: { position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "0.62rem 0.75rem", borderRadius: 12, textDecoration: "none", color: "var(--text-muted)", fontSize: "0.9rem", transition: "all 0.18s ease", border: "1px solid transparent", borderLeft: "2px solid transparent" },
+    navItemActive: { color: "#fff", background: "rgba(119,101,255,0.17)", borderColor: "rgba(119,101,255,0.42)", borderLeft: "2px solid var(--accent)", boxShadow: "0 0 0 1px rgba(119,101,255,0.15) inset" },
     roomHash: { width: 20, height: 20, borderRadius: 7, background: "rgba(119,101,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 },
     dmAvatar: { width: 24, height: 24, borderRadius: 8, background: "rgba(119,101,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", fontWeight: 700, flexShrink: 0 },
-    selectBox: { width: 14, height: 14 },
     dmInfo: { overflow: "hidden", flex: 1 },
     dmName: { fontWeight: 600, fontSize: "0.85rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
     dmLast: { fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
@@ -484,7 +428,7 @@ const styles: Record<string, React.CSSProperties> = {
     smallTitle: { fontSize: "0.66rem", fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 4, color: "#bfc4ff" },
     reqItem: { display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.8rem", padding: "4px 0" },
     checkBtn: { background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)", color: "#fff", border: "none", borderRadius: 8, padding: "4px 6px", cursor: "pointer" },
-    logoutBtn: { margin: 10, padding: "0.75rem 0.9rem", borderTop: "1px solid rgba(143,150,210,0.14)", border: "1px solid rgba(143,150,210,0.24)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text-muted)", background: "rgba(20,26,47,0.45)", cursor: "pointer", fontSize: "0.88rem", fontWeight: 600 },
+    logoutBtn: { margin: "0.6rem 0.9rem 0.9rem", padding: "0.75rem 0.9rem", borderTop: "1px solid rgba(143,150,210,0.14)", border: "1px solid rgba(143,150,210,0.24)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text-muted)", background: "rgba(20,26,47,0.45)", cursor: "pointer", fontSize: "0.88rem", fontWeight: 600 },
     main: { flex: 1, minWidth: 0, position: "relative", padding: "1rem" },
     mainInner: { height: "calc(100vh - 2rem)", maxWidth: 1200, margin: "0 auto", borderRadius: 20, overflow: "hidden", border: "1px solid rgba(143,150,210,0.2)", boxShadow: "0 20px 50px rgba(4,8,20,0.25)", background: "linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%)", backdropFilter: "blur(10px)" },
     mobileToggle: { position: "absolute", top: 16, left: 16, zIndex: 30, width: 36, height: 36, border: "1px solid rgba(143,150,210,0.25)", borderRadius: 10, background: "rgba(17,22,41,0.86)", color: "#d2d5ff", display: "flex", alignItems: "center", justifyContent: "center" },

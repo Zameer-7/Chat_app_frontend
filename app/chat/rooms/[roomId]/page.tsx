@@ -68,22 +68,31 @@ export default function RoomChatPage() {
     const [search, setSearch] = useState("");
     const [forwardToRoom, setForwardToRoom] = useState("");
     const [loadError, setLoadError] = useState("");
+    const [isLoadingRoom, setIsLoadingRoom] = useState(true);
     const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
     const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
     const touchStartRef = useRef<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
+    const parsedRoomId = Number(roomId);
+    const hasValidRoomId = Number.isFinite(parsedRoomId) && parsedRoomId > 0;
     const wsBase = getWsBase();
-    const wsUrl = token ? `${wsBase}/ws/rooms/${roomId}?token=${token}` : null;
+    const wsUrl = token && hasValidRoomId ? `${wsBase}/ws/rooms/${parsedRoomId}?token=${token}` : null;
     const { messages, send, sendJson, setMessages, connected } = useWebSocket(wsUrl);
     const isHost = room?.created_by === user?.id;
 
     const loadRoomData = async () => {
+        if (!hasValidRoomId) {
+            setLoadError("Room not found");
+            setIsLoadingRoom(false);
+            return;
+        }
         try {
+            setIsLoadingRoom(true);
             const [msgRes, roomRes, onlineRes] = await Promise.allSettled([
-                api.get(`/rooms/${roomId}/messages`),
-                api.get(`/rooms/${roomId}`),
-                api.get(`/rooms/${roomId}/online`),
+                api.get(`/rooms/${parsedRoomId}/messages`),
+                api.get(`/rooms/${parsedRoomId}`),
+                api.get(`/rooms/${parsedRoomId}/online`),
             ]);
             if (msgRes.status !== "fulfilled" || roomRes.status !== "fulfilled") {
                 throw new Error("Failed to load room history");
@@ -106,12 +115,19 @@ export default function RoomChatPage() {
             setLoadError("");
         } catch (err: any) {
             setLoadError(err?.response?.data?.detail || "Failed to load room");
+        } finally {
+            setIsLoadingRoom(false);
         }
     };
 
     useEffect(() => {
-        api.post(`/rooms/${roomId}/join`).catch(() => {}).finally(() => { loadRoomData(); });
-    }, [roomId, setMessages]);
+        if (!hasValidRoomId) {
+            setLoadError("Room not found");
+            setIsLoadingRoom(false);
+            return;
+        }
+        api.post(`/rooms/${parsedRoomId}/join`).catch(() => {}).finally(() => { loadRoomData(); });
+    }, [parsedRoomId, hasValidRoomId, setMessages]);
 
     useEffect(() => {
         if (!messages.length) return;
@@ -164,13 +180,14 @@ export default function RoomChatPage() {
     };
     const copyMessage = async (m: any) => navigator.clipboard.writeText(parseMessageContent(String(m.content || "")).body);
 
-    const handleRemoveUser = async (memberUserId: number) => { await api.delete(`/rooms/${roomId}/members/${memberUserId}`); await loadRoomData(); };
-    const handleAddMember = async () => { if (!addUsername.trim()) return; await api.post(`/rooms/${roomId}/members/by-username/${addUsername.trim().toLowerCase()}`); setAddUsername(""); await loadRoomData(); };
-    const handleEndSession = async () => { await api.post(`/rooms/${roomId}/end`); router.push("/chat"); };
-    const handleDeleteRoom = async () => { await api.delete(`/rooms/${roomId}`); router.push("/chat"); };
-    const handleLeave = async () => { await api.delete(`/rooms/${roomId}/leave`); router.push("/chat"); };
+    const handleRemoveUser = async (memberUserId: number) => { await api.delete(`/rooms/${parsedRoomId}/members/${memberUserId}`); await loadRoomData(); };
+    const handleAddMember = async () => { if (!addUsername.trim()) return; await api.post(`/rooms/${parsedRoomId}/members/by-username/${addUsername.trim().toLowerCase()}`); setAddUsername(""); await loadRoomData(); };
+    const handleEndSession = async () => { await api.post(`/rooms/${parsedRoomId}/end`); router.push("/chat"); };
+    const handleDeleteRoom = async () => { await api.delete(`/rooms/${parsedRoomId}`); router.push("/chat"); };
+    const handleLeave = async () => { await api.delete(`/rooms/${parsedRoomId}/leave`); router.push("/chat"); };
 
-    if (!room) return <div style={s.center}>{loadError || "Loading room..."}</div>;
+    if (isLoadingRoom) return <div style={s.center}>Loading room...</div>;
+    if (!room) return <div style={s.center}>{loadError || "Room not found"}</div>;
 
     const shareCopy = async () => {
         const link = `${window.location.origin}/chat/rooms/${room.room_id || room.id}`;
@@ -340,7 +357,7 @@ const s: Record<string, React.CSSProperties> = {
     replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.55)", paddingLeft: 8, marginBottom: 5 },
     replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.92)" },
     replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 },
-    reactionRow: { display: "flex", gap: 6, marginTop: 2, flexWrap: "wrap", alignItems: "center" },
+    reactionRow: { display: "flex", gap: 6, marginTop: 2, flexWrap: "wrap", alignItems: "center", animation: "fadeInFast 0.15s ease" },
     reactionBtn: { border: "1px solid rgba(255,255,255,0.2)", background: "rgba(11,16,34,0.32)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.4rem", fontSize: 11, cursor: "pointer" },
     reactionGhost: { border: "1px solid rgba(255,255,255,0.2)", background: "rgba(11,16,34,0.32)", color: "#dbe1ff", borderRadius: 999, padding: "0.12rem 0.34rem", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" },
     reactionCount: { border: "1px solid rgba(255,255,255,0.25)", background: "rgba(11,16,34,0.34)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.38rem", fontSize: 11 },
@@ -361,7 +378,7 @@ const s: Record<string, React.CSSProperties> = {
     memberName: { display: "flex", alignItems: "center", gap: 4, fontSize: "0.84rem", fontWeight: 700 },
     memberUser: { fontSize: "0.72rem", color: "var(--text-muted)" },
     kickBtn: { width: 26, height: 26, borderRadius: 8, border: "1px solid rgba(239,79,111,0.4)", background: "rgba(239,79,111,0.12)", color: "#ff9fb2", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
-    inputArea: { borderTop: "1px solid rgba(140,148,204,0.2)", padding: "0.7rem 0.9rem", display: "flex", flexDirection: "column", gap: 6 },
+    inputArea: { position: "sticky", bottom: 0, zIndex: 8, borderTop: "1px solid rgba(140,148,204,0.2)", padding: "0.7rem 0.9rem", display: "flex", flexDirection: "column", gap: 6, backdropFilter: "blur(10px)" },
     replyComposer: { display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid rgba(140,148,204,0.26)", background: "rgba(18,24,45,0.65)", borderRadius: 10, padding: "0.45rem 0.6rem" },
     replyComposerTitle: { fontSize: "0.73rem", fontWeight: 700, color: "#c7ccff" },
     replyComposerText: { fontSize: "0.78rem", color: "var(--text-muted)", maxWidth: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },

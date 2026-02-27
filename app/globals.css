@@ -151,3 +151,9 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .brand-mark svg {
   display: block;
 }
+
+.chat-nav-item:hover {
+  background: rgba(119, 101, 255, 0.1);
+  border-color: rgba(119, 101, 255, 0.28);
+  transform: translateX(1px);
+}
