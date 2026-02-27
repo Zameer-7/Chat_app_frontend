@@ -52,6 +52,8 @@ export default function DMChatPage() {
     const [online, setOnline] = useState(false);
     const [forwardTo, setForwardTo] = useState("");
     const [blockedIds, setBlockedIds] = useState<number[]>([]);
+    const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
+    const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const touchStartRef = useRef<number | null>(null);
 
@@ -304,26 +306,42 @@ export default function DMChatPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
-                                            {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
-                                            {parsed.body}
-                                            <div style={s.reactionRow}>
-                                                {!m.is_deleted && !isEditing && <button onClick={() => setReplyingTo({ id: m.id, username: isMe ? user?.username || "" : otherUser.username || "", nickname: isMe ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) })} style={s.reactionGhost}><Reply size={11} /></button>}
-                                                {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.reactionGhost}><Copy size={11} /></button>}
-                                                {isMe && !m.is_deleted && !isEditing && <button onClick={() => startEdit(m)} style={s.reactionGhost}><Edit2 size={11} /></button>}
-                                                {isMe && !m.is_deleted && !isEditing && <button onClick={() => handleDelete(m.id, false)} style={s.reactionGhost}><Trash2 size={11} /></button>}
-                                                
-                                                {REACTION_EMOJIS.map((emoji) => (
-                                                    <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>
-                                                ))}
-                                                {Object.entries(reactions).map(([emoji, users]) => {
-                                                    const count = Array.isArray(users) ? users.length : 0;
-                                                    if (count <= 0) return null;
-                                                    return <span key={`count-${emoji}`} style={s.reactionCount}>{emoji} {count}</span>;
-                                                })}
-                                                {!m.is_deleted && <button onClick={() => pin(m.id)} style={s.reactionGhost}><Pin size={11} /></button>}
-                                                {!m.is_deleted && <button onClick={() => forward(m.id)} style={s.reactionGhost}><Forward size={11} /></button>}
+                                        <div
+                                            style={s.messageWrap}
+                                            onMouseEnter={() => setHoveredMessageId(m.id)}
+                                            onMouseLeave={() => setHoveredMessageId((curr) => (curr === m.id ? null : curr))}
+                                        >
+                                            <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
+                                                {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
+                                                {parsed.body}
                                             </div>
+                                            {(hoveredMessageId === m.id || openMessageMenuId === m.id) && !m.is_deleted && (
+                                                <div style={s.reactionRow}>
+                                                    {REACTION_EMOJIS.slice(0, 3).map((emoji) => (
+                                                        <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>
+                                                    ))}
+                                                    <div style={{ position: "relative" }}>
+                                                        <button style={s.reactionGhost} onClick={() => setOpenMessageMenuId((curr) => curr === m.id ? null : m.id)}>
+                                                            <MoreVertical size={11} />
+                                                        </button>
+                                                        {openMessageMenuId === m.id && (
+                                                            <div style={s.msgMenu}>
+                                                                <button style={s.menuBtn} onClick={() => { setReplyingTo({ id: m.id, username: isMe ? user?.username || "" : otherUser.username || "", nickname: isMe ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) }); setOpenMessageMenuId(null); }}><Reply size={12} /> Reply</button>
+                                                                <button style={s.menuBtn} onClick={() => { copyMessage(m); setOpenMessageMenuId(null); }}><Copy size={12} /> Copy</button>
+                                                                <button style={s.menuBtn} onClick={() => { pin(m.id); setOpenMessageMenuId(null); }}><Pin size={12} /> Pin</button>
+                                                                <button style={s.menuBtn} onClick={() => { forward(m.id); setOpenMessageMenuId(null); }}><Forward size={12} /> Forward</button>
+                                                                {isMe && <button style={s.menuBtn} onClick={() => { startEdit(m); setOpenMessageMenuId(null); }}><Edit2 size={12} /> Edit</button>}
+                                                                {isMe && <button style={{ ...s.menuBtn, color: "#ff99aa" }} onClick={() => { handleDelete(m.id, false); setOpenMessageMenuId(null); }}><Trash2 size={12} /> Delete</button>}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {Object.entries(reactions).map(([emoji, users]) => {
+                                                        const count = Array.isArray(users) ? users.length : 0;
+                                                        if (count <= 0) return null;
+                                                        return <span key={`count-${emoji}`} style={s.reactionCount}>{emoji} {count}</span>;
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -373,16 +391,18 @@ const s: Record<string, React.CSSProperties> = {
     seenTag: { color: "#7fd1ff", fontSize: "0.68rem" },
     msgActions: { display: "flex", gap: 2 },
     actionBtn: { border: "none", background: "transparent", color: "#aeb4e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, padding: 3 },
+    messageWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "inherit", gap: 6 },
     bubble: { padding: "0.7rem 0.9rem", borderRadius: 16, fontSize: "0.93rem", lineHeight: "1.45", color: "#fff", whiteSpace: "pre-wrap", boxShadow: "0 10px 18px rgba(5,8,20,0.35)" },
     myBubble: { background: "linear-gradient(138deg, #7a69ff 0%, #5f4de9 100%)", border: "1px solid rgba(170,160,255,0.45)" },
     otherBubble: { background: "linear-gradient(138deg, #242b4f 0%, #1a213f 100%)", border: "1px solid rgba(140,148,204,0.28)" },
     replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.55)", paddingLeft: 8, marginBottom: 5 },
     replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.92)" },
     replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 },
-    reactionRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
+    reactionRow: { display: "flex", gap: 6, marginTop: 2, flexWrap: "wrap", alignItems: "center" },
     reactionBtn: { border: "1px solid rgba(255,255,255,0.15)", background: "rgba(11,16,34,0.2)", color: "#dbe0ff", borderRadius: 999, padding: "0.1rem 0.35rem", fontSize: 11, cursor: "pointer" },
     reactionCount: { border: "1px solid rgba(255,255,255,0.25)", background: "rgba(11,16,34,0.34)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.38rem", fontSize: 11 },
     reactionGhost: { border: "1px solid rgba(255,255,255,0.15)", background: "rgba(11,16,34,0.2)", color: "#d5dbff", borderRadius: 999, padding: "0.15rem 0.34rem", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" },
+    msgMenu: { position: "absolute", top: 26, right: 0, minWidth: 142, zIndex: 35, borderRadius: 10, background: "rgba(15,20,36,0.95)", border: "1px solid rgba(140,148,204,0.3)", padding: 4 },
     editWrap: { width: "100%", borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(20,26,47,0.75)", padding: 8 },
     editInput: { background: "#12182e", border: "1px solid #6352f0", borderRadius: 10, padding: "0.52rem 0.65rem", color: "#fff" },
     editActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 },

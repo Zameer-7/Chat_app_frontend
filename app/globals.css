@@ -138,3 +138,16 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+.brand-mark {
+  opacity: 0.86;
+  transition: opacity 0.28s ease;
+}
+
+.brand-mark:hover {
+  opacity: 1;
+}
+
+.brand-mark svg {
+  display: block;
+}

@@ -40,7 +40,7 @@ export default function SignupPage() {
         <div style={styles.page}>
             <div style={styles.card}>
                 <div style={styles.logo}>
-                    <div style={styles.logoIcon}>
+                    <div style={styles.logoIcon} className="brand-mark">
                         <NovaChatMark size={34} />
                     </div>
                     <h1 style={styles.appName}>NovaChat</h1>
@@ -157,11 +157,11 @@ const styles: Record<string, React.CSSProperties> = {
         width: 56,
         height: 56,
         borderRadius: 16,
-        background: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)",
+        background: "transparent",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        boxShadow: "0 8px 16px rgba(99, 102, 241, 0.3)"
+        boxShadow: "none"
     },
     appName: { fontSize: "1.6rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" },
     title: { fontSize: "1.75rem", fontWeight: 800, textAlign: "center", marginBottom: "0.5rem", color: "#fff" },

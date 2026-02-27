@@ -1,27 +1,23 @@
 "use client";
-import React from "react";
+import React, { useId } from "react";
 
 export default function NovaChatMark({ size = 32 }: { size?: number }) {
+    const gradId = useId();
     return (
         <svg width={size} height={size} viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <defs>
-                <linearGradient id="nova-grad" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+                <linearGradient id={gradId} x1="20" y1="18" x2="108" y2="106" gradientUnits="userSpaceOnUse">
                     <stop stopColor="#1E90FF" />
                     <stop offset="1" stopColor="#8A2BE2" />
                 </linearGradient>
             </defs>
             <path
-                d="M38 16H90C103.255 16 114 26.7452 114 40V73C114 86.2548 103.255 97 90 97H58L31 112V97H38C24.7452 97 14 86.2548 14 73V40C14 26.7452 24.7452 16 38 16Z"
-                fill="url(#nova-grad)"
-            />
-            <path
-                d="M44 42H86L53 86H86"
-                stroke="white"
-                strokeWidth="10"
+                d="M24 94C30 94 34 89 34 81V37C34 30 39 25 46 25C53 25 58 30 58 37V61C58 69 62 75 70 75C78 75 82 69 82 61V37C82 30 87 25 94 25C101 25 106 30 106 37V91"
+                stroke={`url(#${gradId})`}
+                strokeWidth="12"
                 strokeLinecap="round"
                 strokeLinejoin="round"
             />
         </svg>
     );
 }
-

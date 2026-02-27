@@ -68,6 +68,8 @@ export default function RoomChatPage() {
     const [search, setSearch] = useState("");
     const [forwardToRoom, setForwardToRoom] = useState("");
     const [loadError, setLoadError] = useState("");
+    const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
+    const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
     const touchStartRef = useRef<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -223,22 +225,38 @@ export default function RoomChatPage() {
                                             {!isMe && <span style={s.msgUser}>{m.user_nickname}</span>}
                                             <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                                             {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
-                                            <div style={s.msgActions}>
-                                                {!m.is_deleted && <button onClick={() => setReplyingTo({ id: m.id, username: m.user_username || "", nickname: m.user_nickname || "User", content: parsed.body.slice(0, 120) })} style={s.actionBtn}><Reply size={12} /></button>}
-                                                {!m.is_deleted && <button onClick={() => copyMessage(m)} style={s.actionBtn}><Copy size={12} /></button>}
-                                                {!m.is_deleted && <button onClick={() => pin(m.id)} style={s.actionBtn}><Pin size={12} /></button>}
-                                                {!m.is_deleted && <button onClick={() => forward(m.id)} style={s.actionBtn}><Forward size={12} /></button>}
-                                                {isMe && !m.is_deleted && <button onClick={() => startEdit(m)} style={s.actionBtn}><Edit2 size={12} /></button>}
-                                                {isMe && !m.is_deleted && <button onClick={() => handleDelete(m.id)} style={s.actionBtn}><Trash2 size={12} /></button>}
-                                            </div>
                                         </div>
                                         {editingId === m.id ? (
                                             <div style={s.editWrap}><input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus /><div style={s.editActions}><button onClick={() => handleEditSave(m.id)} style={s.actionBtn}><Check size={14} /></button><button onClick={() => setEditingId(null)} style={s.actionBtn}><X size={14} /></button></div></div>
                                         ) : (
-                                            <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
-                                                {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
-                                                {parsed.body}
-                                                <div style={s.reactionRow}>{REACTION_EMOJIS.map((emoji) => <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji} {Array.isArray(reactions[emoji]) ? reactions[emoji].length : 0}</button>)}</div>
+                                            <div style={s.messageWrap} onMouseEnter={() => setHoveredMessageId(m.id)} onMouseLeave={() => setHoveredMessageId((curr) => (curr === m.id ? null : curr))}>
+                                                <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
+                                                    {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
+                                                    {parsed.body}
+                                                </div>
+                                                {(hoveredMessageId === m.id || openMessageMenuId === m.id) && !m.is_deleted && (
+                                                    <div style={s.reactionRow}>
+                                                        {REACTION_EMOJIS.slice(0, 3).map((emoji) => <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>)}
+                                                        <div style={{ position: "relative" }}>
+                                                            <button style={s.reactionGhost} onClick={() => setOpenMessageMenuId((curr) => curr === m.id ? null : m.id)}><MoreHorizontal size={12} /></button>
+                                                            {openMessageMenuId === m.id && (
+                                                                <div style={s.msgMenu}>
+                                                                    <button style={s.menuItem} onClick={() => { setReplyingTo({ id: m.id, username: m.user_username || "", nickname: m.user_nickname || "User", content: parsed.body.slice(0, 120) }); setOpenMessageMenuId(null); }}><Reply size={12} /> Reply</button>
+                                                                    <button style={s.menuItem} onClick={() => { copyMessage(m); setOpenMessageMenuId(null); }}><Copy size={12} /> Copy</button>
+                                                                    <button style={s.menuItem} onClick={() => { pin(m.id); setOpenMessageMenuId(null); }}><Pin size={12} /> Pin</button>
+                                                                    <button style={s.menuItem} onClick={() => { forward(m.id); setOpenMessageMenuId(null); }}><Forward size={12} /> Forward</button>
+                                                                    {isMe && <button style={s.menuItem} onClick={() => { startEdit(m); setOpenMessageMenuId(null); }}><Edit2 size={12} /> Edit</button>}
+                                                                    {isMe && <button style={{ ...s.menuItem, color: "#ff9fb2" }} onClick={() => { handleDelete(m.id); setOpenMessageMenuId(null); }}><Trash2 size={12} /> Delete</button>}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {Object.entries(reactions).map(([emoji, users]) => {
+                                                            const count = Array.isArray(users) ? users.length : 0;
+                                                            if (count <= 0) return null;
+                                                            return <span key={`count-${emoji}`} style={s.reactionCount}>{emoji} {count}</span>;
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -314,16 +332,20 @@ const s: Record<string, React.CSSProperties> = {
     msgUser: { fontWeight: 700, color: "#dfe2ff" },
     msgTime: { color: "var(--text-muted)" },
     editedTag: { color: "#bcc2ff", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em" },
-    msgActions: { display: "flex", gap: 2 },
     actionBtn: { border: "none", background: "transparent", color: "#aeb4e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, padding: 3 },
+    messageWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "inherit", gap: 6 },
     bubble: { padding: "0.7rem 0.9rem", borderRadius: 16, fontSize: "0.93rem", lineHeight: "1.45", color: "#fff", whiteSpace: "pre-wrap", boxShadow: "0 10px 18px rgba(5,8,20,0.35)" },
     myBubble: { background: "linear-gradient(138deg, #7a69ff 0%, #5f4de9 100%)", border: "1px solid rgba(170,160,255,0.45)" },
     otherBubble: { background: "linear-gradient(138deg, #242b4f 0%, #1a213f 100%)", border: "1px solid rgba(140,148,204,0.28)" },
     replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.55)", paddingLeft: 8, marginBottom: 5 },
     replyAuthor: { fontSize: "0.72rem", fontWeight: 700, color: "rgba(255,255,255,0.92)" },
     replyText: { fontSize: "0.78rem", color: "rgba(255,255,255,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 },
-    reactionRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
+    reactionRow: { display: "flex", gap: 6, marginTop: 2, flexWrap: "wrap", alignItems: "center" },
     reactionBtn: { border: "1px solid rgba(255,255,255,0.2)", background: "rgba(11,16,34,0.32)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.4rem", fontSize: 11, cursor: "pointer" },
+    reactionGhost: { border: "1px solid rgba(255,255,255,0.2)", background: "rgba(11,16,34,0.32)", color: "#dbe1ff", borderRadius: 999, padding: "0.12rem 0.34rem", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" },
+    reactionCount: { border: "1px solid rgba(255,255,255,0.25)", background: "rgba(11,16,34,0.34)", color: "#fff", borderRadius: 999, padding: "0.1rem 0.38rem", fontSize: 11 },
+    msgMenu: { position: "absolute", top: 26, right: 0, minWidth: 142, zIndex: 35, borderRadius: 10, background: "rgba(15,20,36,0.95)", border: "1px solid rgba(140,148,204,0.3)", padding: 4 },
+    menuItem: { width: "100%", border: "none", background: "transparent", color: "#d8dbff", padding: "0.45rem 0.5rem", textAlign: "left", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
     editWrap: { width: "100%", borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(20,26,47,0.75)", padding: 8 },
     editInput: { background: "#12182e", border: "1px solid #6352f0", borderRadius: 10, padding: "0.52rem 0.65rem", color: "#fff" },
     editActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 },
