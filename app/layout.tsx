@@ -6,8 +6,8 @@ import { AuthProvider } from "@/context/AuthContext";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "NovaChat - Real-time Rooms & DMs",
-  description: "A modern real-time chat application with rooms and direct messages",
+  title: "NovaChat",
+  description: "NovaChat",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
