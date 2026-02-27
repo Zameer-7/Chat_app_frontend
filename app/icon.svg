@@ -1,0 +1,11 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="nova-grad" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E90FF"/>
+      <stop offset="1" stop-color="#8A2BE2"/>
+    </linearGradient>
+  </defs>
+  <path d="M38 16H90C103.255 16 114 26.745 114 40V73C114 86.255 103.255 97 90 97H58L31 112V97H38C24.745 97 14 86.255 14 73V40C14 26.745 24.745 16 38 16Z" fill="url(#nova-grad)"/>
+  <path d="M44 42H86L53 86H86" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+

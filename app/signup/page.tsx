@@ -3,7 +3,8 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { MessageCircle, User, AtSign, Mail, Lock } from "lucide-react";
+import { User, AtSign, Mail, Lock } from "lucide-react";
+import NovaChatMark from "@/components/NovaChatMark";
 
 export default function SignupPage() {
     const { signup } = useAuth();
@@ -40,9 +41,9 @@ export default function SignupPage() {
             <div style={styles.card}>
                 <div style={styles.logo}>
                     <div style={styles.logoIcon}>
-                        <MessageCircle size={32} color="#fff" />
+                        <NovaChatMark size={34} />
                     </div>
-                    <h1 style={styles.appName}>ChatApp</h1>
+                    <h1 style={styles.appName}>NovaChat</h1>
                 </div>
                 <h2 style={styles.title}>Create your account</h2>
                 <p style={styles.subtitle}>Join our community today</p>
@@ -113,7 +114,7 @@ export default function SignupPage() {
                         disabled={loading}
                         style={loading ? { ...styles.submitBtn, opacity: 0.7 } : styles.submitBtn}
                     >
-                        {loading ? "Creating account..." : "Join ChatApp"}
+                        {loading ? "Creating account..." : "Join NovaChat"}
                     </button>
                 </form>
 

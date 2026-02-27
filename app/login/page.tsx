@@ -3,7 +3,8 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { MessageCircle, Mail, Lock, ArrowRight } from "lucide-react";
+import { Mail, Lock, ArrowRight } from "lucide-react";
+import NovaChatMark from "@/components/NovaChatMark";
 
 export default function LoginPage() {
     const { login } = useAuth();
@@ -32,9 +33,9 @@ export default function LoginPage() {
             <div style={styles.card}>
                 <div style={styles.logo}>
                     <div style={styles.logoIcon}>
-                        <MessageCircle size={32} color="#fff" />
+                        <NovaChatMark size={34} />
                     </div>
-                    <h1 style={styles.appName}>ChatApp</h1>
+                    <h1 style={styles.appName}>NovaChat</h1>
                 </div>
 
                 <h2 style={styles.title}>Welcome back</h2>
