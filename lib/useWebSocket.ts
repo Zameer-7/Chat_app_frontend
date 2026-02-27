@@ -44,13 +44,17 @@ export function useWebSocket(url: string | null) {
     const send = useCallback((content: string) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({ content }));
+            return true;
         }
+        return false;
     }, []);
 
     const sendJson = useCallback((payload: Record<string, unknown>) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify(payload));
+            return true;
         }
+        return false;
     }, []);
 
     return { messages, send, sendJson, connected, setMessages };

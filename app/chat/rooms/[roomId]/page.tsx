@@ -145,10 +145,21 @@ export default function RoomChatPage() {
         return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("click", onClick); };
     }, [router, contextMenu]);
 
-    const handleSend = (e?: React.FormEvent) => {
+    const handleSend = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!input.trim()) return;
-        send(buildMessageContent(input.trim(), replyingTo));
+        const content = buildMessageContent(input.trim(), replyingTo);
+        const sentViaWs = send(content);
+        if (!sentViaWs) {
+            try {
+                const res = await api.post(`/rooms/${parsedRoomId}/messages`, { content });
+                setMessages((prev) => [...(prev as any[]), { type: "message", ...res.data }]);
+            } catch (err) {
+                console.error("Room send failed:", err);
+                alert("Failed to send message");
+                return;
+            }
+        }
         setInput("");
         setReplyingTo(null);
         sendJson({ type: "typing", is_typing: false });

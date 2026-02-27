@@ -53,6 +53,7 @@ export default function DMChatPage() {
     const [forwardTo, setForwardTo] = useState("");
     const [blockedIds, setBlockedIds] = useState<number[]>([]);
     const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
+    const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number } | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const touchStartRef = useRef<number | null>(null);
@@ -155,11 +156,22 @@ export default function DMChatPage() {
         sendJson({ type: "typing", is_typing: value.trim().length > 0 });
     };
 
-    const handleSend = (e?: React.FormEvent) => {
+    const handleSend = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if (blockedIds.includes(Number(userId))) return;
         if (!input.trim()) return;
-        send(buildMessageContent(input.trim(), replyingTo));
+        const content = buildMessageContent(input.trim(), replyingTo);
+        const sentViaWs = send(content);
+        if (!sentViaWs) {
+            try {
+                const res = await api.post(`/dms/${userId}`, { content });
+                setMessages((prev) => [...(prev as any[]), { type: "dm", ...res.data }]);
+            } catch (err) {
+                console.error("DM send failed:", err);
+                alert("Failed to send message");
+                return;
+            }
+        }
         setInput("");
         setReplyingTo(null);
         sendJson({ type: "typing", is_typing: false });
@@ -314,6 +326,7 @@ export default function DMChatPage() {
                                     ) : (
                                         <div
                                             style={s.messageWrap}
+                                            onContextMenu={(e) => { if (m.is_deleted) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, messageId: m.id }); }}
                                             onMouseEnter={() => setHoveredMessageId(m.id)}
                                             onMouseLeave={() => setHoveredMessageId((curr) => (curr === m.id ? null : curr))}
                                         >
@@ -321,7 +334,7 @@ export default function DMChatPage() {
                                                 {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
                                                 {parsed.body}
                                             </div>
-                                            {(hoveredMessageId === m.id || openMessageMenuId === m.id) && !m.is_deleted && (
+                                            {(hoveredMessageId === m.id || openMessageMenuId === m.id || contextMenu?.messageId === m.id) && !m.is_deleted && (
                                                 <div style={s.reactionRow}>
                                                     {REACTION_EMOJIS.slice(0, 3).map((emoji) => (
                                                         <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>
@@ -370,6 +383,16 @@ export default function DMChatPage() {
                 </div>
                 {showEmoji && <div style={s.emojiWrap}>{["\u{1F600}", "\u{1F602}", "\u{1F60D}", "\u{1F973}", "\u{1F525}", "\u{1F44D}", "\u{1F64F}", "\u2764\uFE0F", "\u{1F60E}", "\u{1F91D}", "\u{1F389}", "\u{1F680}", "\u{1F605}", "\u{1F622}", "\u{1F914}", "\u{1F64C}"].map((e) => <button key={e} type="button" style={s.emojiBtn} onClick={() => addEmoji(e)}>{e}</button>)}</div>}
             </form>
+
+            {contextMenu && (
+                <div style={{ ...s.contextMenu, left: contextMenu.x, top: contextMenu.y }} onClick={(e) => e.stopPropagation()}>
+                    <button style={s.contextMenuItem} onClick={() => { const msg = (messages as any[]).find((m) => m.id === contextMenu.messageId); if (msg) { const parsed = parseMessageContent(String(msg.content || "")); setReplyingTo({ id: msg.id, username: msg.sender_id === user?.id ? user?.username || "" : otherUser.username || "", nickname: msg.sender_id === user?.id ? user?.nickname || "You" : otherUser.nickname || "User", content: parsed.body.slice(0, 120) }); } setContextMenu(null); }}><Reply size={12} /> Reply</button>
+                    <button style={s.contextMenuItem} onClick={() => { const msg = (messages as any[]).find((m) => m.id === contextMenu.messageId); if (msg) copyMessage(msg); setContextMenu(null); }}><Copy size={12} /> Copy</button>
+                    {(() => { const msg = (messages as any[]).find((m) => m.id === contextMenu.messageId); return msg?.sender_id === user?.id && (<><button style={s.contextMenuItem} onClick={() => { startEdit(msg); setContextMenu(null); }}><Edit2 size={12} /> Edit</button><button style={{ ...s.contextMenuItem, color: "#ff9fb2" }} onClick={() => { handleDelete(contextMenu.messageId, false); setContextMenu(null); }}><Trash2 size={12} /> Delete</button></>); })()}
+                    <div style={s.contextMenuDivider} />
+                    {REACTION_EMOJIS.map((emoji) => <button key={emoji} style={s.contextMenuItem} onClick={() => { react(contextMenu.messageId, emoji); setContextMenu(null); }}>{emoji} React</button>)}
+                </div>
+            )}
         </div>
     );
 }
@@ -395,7 +418,6 @@ const s: Record<string, React.CSSProperties> = {
     msgTime: { color: "var(--text-muted)" },
     editedTag: { color: "#bcc2ff", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em" },
     seenTag: { color: "#7fd1ff", fontSize: "0.68rem" },
-    msgActions: { display: "flex", gap: 2 },
     actionBtn: { border: "none", background: "transparent", color: "#aeb4e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, padding: 3 },
     messageWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "inherit", gap: 6 },
     bubble: { padding: "0.7rem 0.9rem", borderRadius: 16, fontSize: "0.93rem", lineHeight: "1.45", color: "#fff", whiteSpace: "pre-wrap", boxShadow: "0 10px 18px rgba(5,8,20,0.35)" },
@@ -426,6 +448,9 @@ const s: Record<string, React.CSSProperties> = {
     emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     menu: { position: "absolute", right: 0, top: 38, zIndex: 30, width: 170, borderRadius: 10, background: "rgba(15,20,36,0.95)", border: "1px solid rgba(140,148,204,0.3)", padding: 4 },
     menuBtn: { width: "100%", border: "none", background: "transparent", color: "#d8dbff", padding: "0.45rem 0.5rem", textAlign: "left", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
+    contextMenu: { position: "fixed", zIndex: 999, minWidth: 160, borderRadius: 12, background: "rgba(15,20,36,0.98)", border: "1px solid rgba(140,148,204,0.35)", padding: 6, boxShadow: "0 12px 28px rgba(0,0,0,0.5)", animation: "fadeInFast 0.15s ease", backdropFilter: "blur(12px)" },
+    contextMenuItem: { width: "100%", border: "none", background: "transparent", color: "#d8dbff", padding: "0.5rem 0.6rem", textAlign: "left", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.88rem" },
+    contextMenuDivider: { height: 1, background: "rgba(140,148,204,0.2)", margin: "4px 0" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
 };
 

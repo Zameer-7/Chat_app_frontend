@@ -29,8 +29,9 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const [lastDmAt, setLastDmAt] = useState<Record<number, string>>({});
     const [toasts, setToasts] = useState<Array<{ id: string; userId?: number; route?: string; title: string; body: string }>>([]);
     const [activeSidebarTab, setActiveSidebarTab] = useState<"friends" | "chats">("friends");
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: "dm" | "room"; id: number } | null>(null);
 
-    const roomPath = (room: any) => `/chat/rooms/${room.room_id || room.id}`;
+    const roomPath = (room: any) => `/chat/rooms/${Number(room?.id)}`;
     const activeDmId = pathname.startsWith("/chat/dms/") ? Number(pathname.split("/").pop()) : null;
 
     const loadSidebarData = async () => {
@@ -65,6 +66,19 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     }, [activeDmId]);
 
     useEffect(() => {
+        const onEsc = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setContextMenu(null);
+        };
+        const onClick = () => setContextMenu(null);
+        window.addEventListener("keydown", onEsc);
+        window.addEventListener("click", onClick);
+        return () => {
+            window.removeEventListener("keydown", onEsc);
+            window.removeEventListener("click", onClick);
+        };
+    }, []);
+
+    useEffect(() => {
         if (!loading && !user) router.replace("/login");
     }, [loading, user, router]);
 
@@ -85,6 +99,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
             Notification.requestPermission().catch(() => {});
         }
     }, []);
+
+    useEffect(() => {
+        if (activeSidebarTab === "friends" && pathname.startsWith("/chat/rooms/")) {
+            router.push("/chat");
+        }
+    }, [activeSidebarTab, pathname, router]);
 
     useEffect(() => {
         if (!user) return;
@@ -208,6 +228,34 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const friendMap = useMemo(() => new Map(friends.map((f) => [f.id, f])), [friends]);
     const conversationMap = useMemo(() => new Map(dmConversations.map((c) => [c.user?.id, c])), [dmConversations]);
 
+    const deleteDmConversation = async (otherUserId: number) => {
+        if (!confirm("Are you sure you want to delete this chat?")) return;
+        try {
+            await api.post(`/dms/conversations/${otherUserId}/clear`);
+            setDmConversations((prev) => prev.filter((c) => Number(c?.user?.id) !== Number(otherUserId)));
+            setUnreadCounts((prev) => {
+                const next = { ...prev };
+                delete next[otherUserId];
+                return next;
+            });
+            if (activeDmId === otherUserId) router.push("/chat");
+        } catch (err: any) {
+            alert(err.response?.data?.detail || "Failed to delete chat");
+        }
+    };
+
+    const deleteOrLeaveRoom = async (roomId: number) => {
+        if (!confirm("Are you sure you want to remove this room chat?")) return;
+        try {
+            await api.delete(`/rooms/${roomId}`);
+        } catch {
+            await api.delete(`/rooms/${roomId}/leave`);
+        } finally {
+            setRooms((prev) => prev.filter((r) => Number(r.id) !== Number(roomId)));
+            if (pathname.includes(`/rooms/${roomId}`)) router.push("/chat");
+        }
+    };
+
     if (loading || !user) return <div style={styles.bootScreen}>Loading...</div>;
 
     return (
@@ -259,13 +307,13 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                             {friends.map((f) => {
                                 const active = pathname.includes(`/dms/${f.id}`);
                                 const hasUnread = !!unreadCounts[f.id];
-                                const conv = conversationMap.get(f.id);
                                 return (
                                     <Link
                                         key={f.id}
                                         href={`/chat/dms/${f.id}`}
                                         className="chat-nav-item"
                                         style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }}
+                                        onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, type: "dm", id: f.id }); }}
                                         onClick={(e) => {
                                             if (isMobile) setSidebarOpen(false);
                                         }}
@@ -273,7 +321,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                         <div style={styles.dmAvatar}>{f.nickname?.[0] || "?"}</div>
                                         <div style={styles.dmInfo}>
                                             <p style={{ ...styles.dmName, fontWeight: hasUnread ? 800 : 600 }}>{f.nickname}</p>
-                                            <p style={styles.dmLast}>{conv?.last_message || `@${f.username}`}</p>
+                                            <p style={styles.dmLast}>@{f.username}</p>
                                         </div>
                                         {!!unreadCounts[f.id] && <span style={styles.unreadBadge}>{unreadCounts[f.id] > 99 ? "99+" : unreadCounts[f.id]}</span>}
                                         <span style={{ ...styles.onlineDot, background: active ? "var(--success)" : "#8b93be", boxShadow: "none" }} />
@@ -291,6 +339,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                                     href={`/chat/dms/${conv.user.id}`}
                                     className="chat-nav-item"
                                     style={{ ...styles.navItem, ...(pathname.includes(`/dms/${conv.user.id}`) ? styles.navItemActive : {}) }}
+                                    onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, type: "dm", id: conv.user.id }); }}
                                     onClick={(e) => {
                                         if (isMobile) setSidebarOpen(false);
                                     }}
@@ -307,19 +356,31 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         </div>
                     )}
 
-                    <div style={{ ...styles.sectionLabel, marginTop: "1.2rem" }}>Rooms</div>
-                    <div style={styles.listWrap}>
-                        {rooms.map((room) => {
-                            const active = pathname.includes(`/rooms/${room.room_id || room.id}`);
-                            return (
-                                <Link key={room.id} href={roomPath(room)} className="chat-nav-item" style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }} onClick={() => isMobile && setSidebarOpen(false)}>
-                                    <div style={styles.roomHash}>#</div>
-                                    <span>{room.name}</span>
-                                    {room.created_by === user.id && <Crown size={12} color="#f7ce46" />}
-                                </Link>
-                            );
-                        })}
-                    </div>
+                    {activeSidebarTab === "chats" && (
+                        <>
+                            <div style={{ ...styles.sectionLabel, marginTop: "1.2rem" }}>Rooms</div>
+                            <div style={styles.listWrap}>
+                                {(rooms || []).map((room) => {
+                                    const id = Number(room?.id);
+                                    const active = pathname.includes(`/rooms/${id}`);
+                                    return (
+                                        <Link
+                                            key={id}
+                                            href={roomPath(room)}
+                                            className="chat-nav-item"
+                                            style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }}
+                                            onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, type: "room", id }); }}
+                                            onClick={() => isMobile && setSidebarOpen(false)}
+                                        >
+                                            <div style={styles.roomHash}>#</div>
+                                            <span>{room.name}</span>
+                                            {room.created_by === user.id && <Crown size={12} color="#f7ce46" />}
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <button onClick={logout} style={styles.logoutBtn}><LogOut size={16} /> Log Out</button>
@@ -388,6 +449,17 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                     </button>
                 ))}
             </div>
+
+            {contextMenu && (
+                <div style={{ ...styles.contextMenu, top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
+                    <button style={styles.contextMenuItem} onClick={() => { if (contextMenu.type === "dm") router.push(`/chat/dms/${contextMenu.id}`); else router.push(`/chat/rooms/${contextMenu.id}`); setContextMenu(null); }}>Open Chat</button>
+                    {contextMenu.type === "dm" ? (
+                        <button style={{ ...styles.contextMenuItem, color: "#ff9fb2" }} onClick={() => { deleteDmConversation(contextMenu.id); setContextMenu(null); }}>Delete Chat</button>
+                    ) : (
+                        <button style={{ ...styles.contextMenuItem, color: "#ff9fb2" }} onClick={() => { deleteOrLeaveRoom(contextMenu.id); setContextMenu(null); }}>Leave/Delete Room</button>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -450,4 +522,6 @@ const styles: Record<string, React.CSSProperties> = {
     toast: { minWidth: 240, maxWidth: 320, borderRadius: 12, border: "1px solid rgba(140,148,204,0.3)", background: "rgba(17,24,45,0.95)", color: "#fff", padding: "0.65rem 0.75rem", textAlign: "left", cursor: "pointer", animation: "fadeInFast 0.2s ease" },
     toastTitle: { fontSize: "0.84rem", fontWeight: 700, marginBottom: 2 },
     toastBody: { fontSize: "0.78rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+    contextMenu: { position: "fixed", zIndex: 300, minWidth: 150, borderRadius: 10, border: "1px solid rgba(140,148,204,0.35)", background: "rgba(14,20,39,0.98)", padding: 5, animation: "fadeInFast 0.15s ease" },
+    contextMenuItem: { width: "100%", border: "none", background: "transparent", color: "#d8dbff", padding: "0.5rem 0.55rem", textAlign: "left", borderRadius: 8, cursor: "pointer" },
 };
