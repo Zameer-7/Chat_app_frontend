@@ -53,7 +53,7 @@ export default function DMChatPage() {
     const [forwardTo, setForwardTo] = useState("");
     const [blockedIds, setBlockedIds] = useState<number[]>([]);
     const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
-    const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number } | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const touchStartRef = useRef<number | null>(null);
 
@@ -143,10 +143,12 @@ export default function DMChatPage() {
     }, [messages]);
 
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") router.push("/chat"); };
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { if (contextMenu) setContextMenu(null); else router.push("/chat"); } };
+        const onClick = () => setContextMenu(null);
         window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [router]);
+        window.addEventListener("click", onClick);
+        return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("click", onClick); };
+    }, [router, contextMenu]);
 
     const onInput = (value: string) => {
         setInput(value);
@@ -286,8 +288,12 @@ export default function DMChatPage() {
                         const isMe = m.sender_id === user?.id;
                         const isEditing = editingId === m.id;
                         const parsed = parseMessageContent(String(m.content || ""));
-                        let status = "";
-                        if (isMe) status = m.seen_at ? "Seen" : m.delivered_at ? "Delivered" : connected ? "Sent" : "";
+                        let statusIcon = "";
+                        if (isMe) {
+                            if (m.seen_at) statusIcon = "✓✓";
+                            else if (m.delivered_at) statusIcon = "✓✓";
+                            else if (connected) statusIcon = "✓";
+                        }
                         const reactions = JSON.parse(m.reactions || "{}");
                         return (
                             <div key={`${m.id}-${i}`} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row" }}>
@@ -295,7 +301,7 @@ export default function DMChatPage() {
                                         <div style={s.msgMeta}>
                                             <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                                             {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
-                                            {status && <span style={s.seenTag}>{status}</span>}
+                                            {statusIcon && <span style={{ ...s.seenTag, color: m.seen_at ? "#4a9eff" : "#8f96c6" }}>{statusIcon}</span>}
                                         </div>
                                     {isEditing ? (
                                         <div style={s.editWrap}>

@@ -70,7 +70,7 @@ export default function RoomChatPage() {
     const [loadError, setLoadError] = useState("");
     const [isLoadingRoom, setIsLoadingRoom] = useState(true);
     const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
-    const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: number } | null>(null);
     const touchStartRef = useRef<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -138,10 +138,12 @@ export default function RoomChatPage() {
 
     useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [messages]);
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") router.push("/chat"); };
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { if (contextMenu) setContextMenu(null); else router.push("/chat"); } };
+        const onClick = () => setContextMenu(null);
         window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [router]);
+        window.addEventListener("click", onClick);
+        return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("click", onClick); };
+    }, [router, contextMenu]);
 
     const handleSend = (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -246,24 +248,24 @@ export default function RoomChatPage() {
                                         {editingId === m.id ? (
                                             <div style={s.editWrap}><input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus /><div style={s.editActions}><button onClick={() => handleEditSave(m.id)} style={s.actionBtn}><Check size={14} /></button><button onClick={() => setEditingId(null)} style={s.actionBtn}><X size={14} /></button></div></div>
                                         ) : (
-                                            <div style={s.messageWrap} onMouseEnter={() => setHoveredMessageId(m.id)} onMouseLeave={() => setHoveredMessageId((curr) => (curr === m.id ? null : curr))}>
+                                            <div style={s.messageWrap} onContextMenu={(e) => { if (m.is_deleted) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, messageId: m.id }); }}>
                                                 <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
                                                     {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
                                                     {parsed.body}
                                                 </div>
-                                                {(hoveredMessageId === m.id || openMessageMenuId === m.id) && !m.is_deleted && (
+                                                {(hoveredMessageId === m.id || contextMenu?.messageId === m.id) && !m.is_deleted && (
                                                     <div style={s.reactionRow}>
                                                         {REACTION_EMOJIS.slice(0, 3).map((emoji) => <button key={emoji} style={s.reactionBtn} onClick={() => react(m.id, emoji)}>{emoji}</button>)}
                                                         <div style={{ position: "relative" }}>
-                                                            <button style={s.reactionGhost} onClick={() => setOpenMessageMenuId((curr) => curr === m.id ? null : m.id)}><MoreHorizontal size={12} /></button>
-                                                            {openMessageMenuId === m.id && (
+                                                            <button style={s.reactionGhost} onClick={() => setContextMenu((curr) => curr?.messageId === m.id ? null : { x: 0, y: 0, messageId: m.id })}><MoreHorizontal size={12} /></button>
+                                                            {contextMenu?.messageId === m.id && (
                                                                 <div style={s.msgMenu}>
-                                                                    <button style={s.menuItem} onClick={() => { setReplyingTo({ id: m.id, username: m.user_username || "", nickname: m.user_nickname || "User", content: parsed.body.slice(0, 120) }); setOpenMessageMenuId(null); }}><Reply size={12} /> Reply</button>
-                                                                    <button style={s.menuItem} onClick={() => { copyMessage(m); setOpenMessageMenuId(null); }}><Copy size={12} /> Copy</button>
-                                                                    <button style={s.menuItem} onClick={() => { pin(m.id); setOpenMessageMenuId(null); }}><Pin size={12} /> Pin</button>
-                                                                    <button style={s.menuItem} onClick={() => { forward(m.id); setOpenMessageMenuId(null); }}><Forward size={12} /> Forward</button>
-                                                                    {isMe && <button style={s.menuItem} onClick={() => { startEdit(m); setOpenMessageMenuId(null); }}><Edit2 size={12} /> Edit</button>}
-                                                                    {isMe && <button style={{ ...s.menuItem, color: "#ff9fb2" }} onClick={() => { handleDelete(m.id); setOpenMessageMenuId(null); }}><Trash2 size={12} /> Delete</button>}
+                                                                    <button style={s.menuItem} onClick={() => { setReplyingTo({ id: m.id, username: m.user_username || "", nickname: m.user_nickname || "User", content: parsed.body.slice(0, 120) }); setContextMenu(null); }}><Reply size={12} /> Reply</button>
+                                                                    <button style={s.menuItem} onClick={() => { copyMessage(m); setContextMenu(null); }}><Copy size={12} /> Copy</button>
+                                                                    <button style={s.menuItem} onClick={() => { pin(m.id); setContextMenu(null); }}><Pin size={12} /> Pin</button>
+                                                                    <button style={s.menuItem} onClick={() => { forward(m.id); setContextMenu(null); }}><Forward size={12} /> Forward</button>
+                                                                    {isMe && <button style={s.menuItem} onClick={() => { startEdit(m); setContextMenu(null); }}><Edit2 size={12} /> Edit</button>}
+                                                                    {isMe && <button style={{ ...s.menuItem, color: "#ff9fb2" }} onClick={() => { handleDelete(m.id); setContextMenu(null); }}><Trash2 size={12} /> Delete</button>}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -307,6 +309,16 @@ export default function RoomChatPage() {
                     </aside>
                 )}
             </div>
+
+            {contextMenu && (
+                <div style={{ ...s.contextMenu, left: contextMenu.x, top: contextMenu.y }} onClick={(e) => e.stopPropagation()}>
+                    <button style={s.contextMenuItem} onClick={() => { const msg = (messages as any[]).find((m) => m.id === contextMenu.messageId); if (msg) { const parsed = parseMessageContent(String(msg.content || "")); setReplyingTo({ id: msg.id, username: msg.user_username || "", nickname: msg.user_nickname || "User", content: parsed.body.slice(0, 120) }); } setContextMenu(null); }}><Reply size={12} /> Reply</button>
+                    <button style={s.contextMenuItem} onClick={() => { const msg = (messages as any[]).find((m) => m.id === contextMenu.messageId); if (msg) copyMessage(msg); setContextMenu(null); }}><Copy size={12} /> Copy</button>
+                    {(() => { const msg = (messages as any[]).find((m) => m.id === contextMenu.messageId); return msg?.user_id === user?.id && (<><button style={s.contextMenuItem} onClick={() => { startEdit(msg); setContextMenu(null); }}><Edit2 size={12} /> Edit</button><button style={{ ...s.contextMenuItem, color: "#ff9fb2" }} onClick={() => { handleDelete(contextMenu.messageId); setContextMenu(null); }}><Trash2 size={12} /> Delete</button></>); })()}
+                    <div style={s.contextMenuDivider} />
+                    {REACTION_EMOJIS.map((emoji) => <button key={emoji} style={s.contextMenuItem} onClick={() => { react(contextMenu.messageId, emoji); setContextMenu(null); }}>{emoji} React</button>)}
+                </div>
+            )}
 
             <form onSubmit={handleSend} style={s.inputArea} className="glass">
                 {replyingTo && <div style={s.replyComposer}><div><p style={s.replyComposerTitle}>Replying to @{replyingTo.username || replyingTo.nickname}</p><p style={s.replyComposerText}>{replyingTo.content}</p></div><button type="button" style={s.actionBtn} onClick={() => setReplyingTo(null)}><X size={14} /></button></div>}
@@ -390,6 +402,9 @@ const s: Record<string, React.CSSProperties> = {
     emojiWrap: { display: "flex", flexWrap: "wrap", gap: 6, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(13,18,34,0.75)", borderRadius: 12, padding: 8 },
     emojiBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(140,148,204,0.2)", background: "rgba(20,27,48,0.7)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
     center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" },
+    contextMenu: { position: "fixed", zIndex: 999, minWidth: 160, borderRadius: 12, background: "rgba(15,20,36,0.98)", border: "1px solid rgba(140,148,204,0.35)", padding: 6, boxShadow: "0 12px 28px rgba(0,0,0,0.5)", animation: "fadeInFast 0.15s ease", backdropFilter: "blur(12px)" },
+    contextMenuItem: { width: "100%", border: "none", background: "transparent", color: "#d8dbff", padding: "0.5rem 0.6rem", textAlign: "left", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.88rem" },
+    contextMenuDivider: { height: 1, background: "rgba(140,148,204,0.2)", margin: "4px 0" },
 };
 
 

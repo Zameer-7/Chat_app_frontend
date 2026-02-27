@@ -27,8 +27,13 @@ export default function ProfilePage() {
     }, [user]);
 
     useEffect(() => {
-        const loadBlocked = () => {
-            api.get("/users/blocked").then((res) => setBlocked(Array.isArray(res.data) ? res.data : [])).catch(() => setBlocked([]));
+        const loadBlocked = async () => {
+            try {
+                const res = await api.get("/users/blocked");
+                setBlocked(Array.isArray(res.data) ? res.data : []);
+            } catch {
+                setBlocked([]);
+            }
         };
         loadBlocked();
         window.addEventListener("focus", loadBlocked);
@@ -60,6 +65,8 @@ export default function ProfilePage() {
         try {
             await updateProfile({ nickname, username, show_last_seen: showLastSeen, show_online_status: showOnline, theme_mode: themeMode, theme_accent: themeAccent });
             setMessage({ text: "Settings updated", type: "success" });
+            const res = await api.get("/users/blocked");
+            setBlocked(Array.isArray(res.data) ? res.data : []);
         } catch (err: any) {
             setMessage({ text: err.response?.data?.detail || err?.message || "Update failed", type: "error" });
         } finally {
@@ -68,8 +75,13 @@ export default function ProfilePage() {
     };
 
     const unblock = async (id: number) => {
-        await api.delete(`/users/block/${id}`);
-        setBlocked((prev) => prev.filter((b) => b.blocked_id !== id));
+        try {
+            await api.delete(`/users/block/${id}`);
+            setBlocked((prev) => prev.filter((b) => b.blocked_id !== id));
+            setMessage({ text: "User unblocked", type: "success" });
+        } catch (err: any) {
+            setMessage({ text: "Failed to unblock user", type: "error" });
+        }
     };
 
     if (!user) return null;
@@ -120,8 +132,16 @@ export default function ProfilePage() {
                         <section style={s.section}>
                             <p style={s.sectionTitle}>Blocked Users</p>
                             <div style={s.blockList}>
-                                {blocked.length === 0 && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>No blocked users</p>}
-                                {blocked.map((b) => <div key={b.id} style={s.blockItem}><span>@{b.blocked_user?.username || b.blocked_id}</span><button style={s.unblockBtn} onClick={() => unblock(b.blocked_id)}>Unblock</button></div>)}
+                                {blocked.length === 0 ? (
+                                    <p style={{ color: "var(--text-muted)", fontSize: 13 }}>No blocked users</p>
+                                ) : (
+                                    blocked.map((b) => (
+                                        <div key={b.id} style={s.blockItem}>
+                                            <span style={{ color: "var(--text-primary)", fontSize: "0.88rem" }}>@{b.blocked_user?.username || b.blocked_id}</span>
+                                            <button style={s.unblockBtn} onClick={() => unblock(b.blocked_id)}>Unblock</button>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </section>
 
@@ -169,7 +189,7 @@ const s: Record<string, React.CSSProperties> = {
     swatchBtn: { border: "none", background: "transparent", padding: 0, cursor: "pointer" },
     swatch: { width: 24, height: 24, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.38)", display: "flex", alignItems: "center", justifyContent: "center" },
     blockList: { border: "1px solid var(--border)", borderRadius: 10, padding: "0.6rem", display: "flex", flexDirection: "column", gap: 6 },
-    blockItem: { display: "flex", alignItems: "center", justifyContent: "space-between" },
+    blockItem: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem", borderRadius: 8, background: "rgba(18,24,45,0.4)" },
     unblockBtn: { background: "rgba(239,79,111,0.14)", color: "#ff9fb2", border: "1px solid rgba(239,79,111,0.45)", borderRadius: 8, padding: "0.35rem 0.6rem", cursor: "pointer" },
     cardFooter: { borderTop: "1px solid rgba(143,150,210,0.2)", paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 },
     status: { fontWeight: 600, fontSize: "0.88rem", minHeight: 16 },
