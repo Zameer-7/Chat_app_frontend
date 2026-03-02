@@ -57,6 +57,14 @@ function safeDecode(value: string) {
     }
 }
 
+function isEditedMessage(message: any) {
+    if (message?.is_edited) return true;
+    if (!message?.updated_at || !message?.created_at) return false;
+    const updated = new Date(message.updated_at).getTime();
+    const created = new Date(message.created_at).getTime();
+    return Number.isFinite(updated) && Number.isFinite(created) && updated - created > 1000;
+}
+
 export default function RoomChatPage() {
     const { roomId } = useParams();
     const router = useRouter();
@@ -256,6 +264,7 @@ export default function RoomChatPage() {
                             if (m.type === "system") return <div key={i} style={s.systemMsg}>{m.content}</div>;
                             const parsed = parseMessageContent(String(m.content || ""));
                             const reactions = safeReactions(m.reactions);
+                            const edited = isEditedMessage(m) && !m.is_deleted;
                             return (
                                 <div key={`${m.id}-${i}`} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row" }}>
                                     <div style={{ ...s.avatar, background: isMe ? "linear-gradient(135deg,var(--accent),var(--accent-2))" : "#242d52" }}>{String(m.user_nickname || "?")[0].toUpperCase()}</div>
@@ -263,7 +272,7 @@ export default function RoomChatPage() {
                                         <div style={s.msgMeta}>
                                             {!isMe && <span style={s.msgUser}>{m.user_nickname}</span>}
                                             <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
-                                            {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
+                                            {edited && <span style={s.editedTag}>Edited</span>}
                                         </div>
                                         {editingId === m.id ? (
                                             <div style={s.editWrap}><input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus /><div style={s.editActions}><button onClick={() => handleEditSave(m.id)} style={s.actionBtn}><Check size={14} /></button><button onClick={() => setEditingId(null)} style={s.actionBtn}><X size={14} /></button></div></div>
@@ -385,7 +394,7 @@ const s: Record<string, React.CSSProperties> = {
     msgMeta: { display: "flex", alignItems: "center", gap: 6, fontSize: "0.74rem" },
     msgUser: { fontWeight: 700, color: "#dfe2ff" },
     msgTime: { color: "var(--text-muted)" },
-    editedTag: { color: "#bcc2ff", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em" },
+    editedTag: { color: "var(--text-muted)", fontSize: "0.66rem", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.04em" },
     actionBtn: { border: "none", background: "transparent", color: "#aeb4e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, padding: 3 },
     messageWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "inherit", gap: 6 },
     bubble: { padding: "0.7rem 0.9rem", borderRadius: 16, fontSize: "0.93rem", lineHeight: "1.45", color: "#fff", whiteSpace: "pre-wrap", boxShadow: "0 10px 18px rgba(5,8,20,0.35)" },

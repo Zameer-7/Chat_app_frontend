@@ -36,6 +36,14 @@ function buildMessageContent(body: string, reply: ReplyMeta | null) {
     return `[[reply:${encodeURIComponent(JSON.stringify(reply))}]]\n${body}`;
 }
 
+function isEditedMessage(message: any) {
+    if (message?.is_edited) return true;
+    if (!message?.updated_at || !message?.created_at) return false;
+    const updated = new Date(message.updated_at).getTime();
+    const created = new Date(message.created_at).getTime();
+    return Number.isFinite(updated) && Number.isFinite(created) && updated - created > 1000;
+}
+
 export default function DMChatPage() {
     const { userId } = useParams();
     const router = useRouter();
@@ -300,21 +308,23 @@ export default function DMChatPage() {
                         const isMe = m.sender_id === user?.id;
                         const isEditing = editingId === m.id;
                         const parsed = parseMessageContent(String(m.content || ""));
-                        let statusText = "";
+                        const edited = isEditedMessage(m) && !m.is_deleted;
+                        let tickText = "";
+                        let tickColor = "#8f96c6";
                         if (isMe) {
-                            if (m.seen_at) statusText = "Seen";
-                            else if (m.delivered_at) statusText = "Delivered";
-                            else if (connected) statusText = "Sent";
+                            if (m.seen_at) {
+                                tickText = "✓✓";
+                                tickColor = "#4a9eff";
+                            } else if (m.delivered_at) {
+                                tickText = "✓✓";
+                            } else if (connected || m.created_at) {
+                                tickText = "✓";
+                            }
                         }
                         const reactions = JSON.parse(m.reactions || "{}");
                         return (
                             <div key={`${m.id}-${i}`} style={{ ...s.msgRow, flexDirection: isMe ? "row-reverse" : "row" }}>
                                 <div style={{ ...s.msgCol, alignItems: isMe ? "flex-end" : "flex-start" }}>
-                                        <div style={s.msgMeta}>
-                                            <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
-                                            {!!m.updated_at && !m.is_deleted && <span style={s.editedTag}>edited</span>}
-                                            {statusText && <span style={{ ...s.seenTag, color: m.seen_at ? "#4a9eff" : "#8f96c6" }}>{statusText}</span>}
-                                        </div>
                                     {isEditing ? (
                                         <div style={s.editWrap}>
                                             <input style={s.editInput} value={editValue} onChange={(e) => setEditValue(e.target.value)} autoFocus />
@@ -330,9 +340,14 @@ export default function DMChatPage() {
                                             onMouseEnter={() => setHoveredMessageId(m.id)}
                                             onMouseLeave={() => setHoveredMessageId((curr) => (curr === m.id ? null : curr))}
                                         >
-                                            <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
+                                            <div style={{ ...s.bubble, ...(isMe ? s.myBubble : s.otherBubble), ...(hoveredMessageId === m.id ? s.bubbleHover : {}), opacity: m.is_deleted ? 0.6 : 1, fontStyle: m.is_deleted ? "italic" : "normal" }}>
                                                 {parsed.reply && <div style={s.replyPreview}><p style={s.replyAuthor}>Reply to @{parsed.reply.username || parsed.reply.nickname}</p><p style={s.replyText}>{parsed.reply.content}</p></div>}
                                                 {parsed.body}
+                                            </div>
+                                            <div style={s.msgMeta}>
+                                                <span style={s.msgTime}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                                                {edited && <span style={s.editedTag}>Edited</span>}
+                                                {tickText && <span style={{ ...s.tickTag, color: tickColor }}>{tickText}</span>}
                                             </div>
                                             {(hoveredMessageId === m.id || openMessageMenuId === m.id || contextMenu?.messageId === m.id) && !m.is_deleted && (
                                                 <div style={s.reactionRow}>
@@ -413,13 +428,14 @@ const s: Record<string, React.CSSProperties> = {
     historyWall: { padding: "1rem", display: "flex", flexDirection: "column", gap: "0.9rem" },
     msgRow: { display: "flex", gap: 10, maxWidth: "86%" },
     msgCol: { display: "flex", flexDirection: "column", gap: 4 },
-    msgMeta: { display: "flex", alignItems: "center", gap: 6, fontSize: "0.74rem" },
+    msgMeta: { display: "flex", alignItems: "center", gap: 6, fontSize: "0.72rem", marginTop: 2, opacity: 0.95 },
     msgTime: { color: "var(--text-muted)" },
-    editedTag: { color: "#bcc2ff", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em" },
-    seenTag: { color: "#7fd1ff", fontSize: "0.68rem" },
+    editedTag: { color: "var(--text-muted)", fontSize: "0.66rem", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.04em" },
+    tickTag: { fontSize: "0.74rem", letterSpacing: "-0.08em", transition: "color 0.2s ease" },
     actionBtn: { border: "none", background: "transparent", color: "#aeb4e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, padding: 3 },
     messageWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "inherit", gap: 6 },
-    bubble: { padding: "0.7rem 0.9rem", borderRadius: 16, fontSize: "0.93rem", lineHeight: "1.45", color: "#fff", whiteSpace: "pre-wrap", boxShadow: "0 10px 18px rgba(5,8,20,0.35)" },
+    bubble: { padding: "0.7rem 0.9rem", borderRadius: 16, fontSize: "0.93rem", lineHeight: "1.45", color: "#fff", whiteSpace: "pre-wrap", boxShadow: "0 10px 18px rgba(5,8,20,0.35)", transition: "transform 0.18s ease, box-shadow 0.18s ease" },
+    bubbleHover: { transform: "translateY(-1px)", boxShadow: "0 14px 24px rgba(4,8,20,0.42)" },
     myBubble: { background: "linear-gradient(138deg, #7a69ff 0%, #5f4de9 100%)", border: "1px solid rgba(170,160,255,0.45)" },
     otherBubble: { background: "linear-gradient(138deg, #242b4f 0%, #1a213f 100%)", border: "1px solid rgba(140,148,204,0.28)" },
     replyPreview: { borderLeft: "3px solid rgba(255,255,255,0.55)", paddingLeft: 8, marginBottom: 5 },

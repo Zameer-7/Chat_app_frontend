@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Settings, LogOut, Plus, Search, UserCheck, Clock, AtSign, Menu, X, Crown, Users, MessageCircle } from "lucide-react";
@@ -26,10 +26,11 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const [isMobile, setIsMobile] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
-    const [lastDmAt, setLastDmAt] = useState<Record<number, string>>({});
     const [toasts, setToasts] = useState<Array<{ id: string; userId?: number; route?: string; title: string; body: string }>>([]);
     const [activeSidebarTab, setActiveSidebarTab] = useState<"friends" | "chats">("friends");
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: "dm" | "room"; id: number } | null>(null);
+    const lastDmAtRef = useRef<Record<number, string>>({});
+    const notifiedRef = useRef<Record<string, number>>({});
 
     const roomPath = (room: any) => `/chat/rooms/${Number(room?.id)}`;
     const activeDmId = pathname.startsWith("/chat/dms/") ? Number(pathname.split("/").pop()) : null;
@@ -45,9 +46,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
             setRooms(r.data);
             setDmConversations(d.data);
             const unreadFromApi: Record<number, number> = {};
+            const latestMap: Record<number, string> = {};
             (d.data || []).forEach((conv: any) => {
                 if (conv?.user?.id) unreadFromApi[conv.user.id] = Number(conv.unread_count || 0);
+                if (conv?.user?.id && conv?.last_at) latestMap[conv.user.id] = String(conv.last_at);
             });
+            lastDmAtRef.current = latestMap;
             setUnreadCounts((prev) => ({ ...unreadFromApi, ...prev }));
             setFriendRequests(f.data);
             setFriends(fa.data);
@@ -106,9 +110,28 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         }
     }, [activeSidebarTab, pathname, router]);
 
+    const playNotificationTone = () => {
+        try {
+            const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+            if (!Ctx) return;
+            const ctx = new Ctx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = 880;
+            gain.gain.value = 0.0001;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            const now = ctx.currentTime;
+            gain.gain.exponentialRampToValueAtTime(0.03, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+            osc.start(now);
+            osc.stop(now + 0.18);
+        } catch {}
+    };
+
     useEffect(() => {
         if (!user) return;
-        const lastRef: { current: Record<number, string> } = { current: { ...lastDmAt } };
         const interval = setInterval(async () => {
             try {
                 const res = await api.get("/dms");
@@ -116,7 +139,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                 setDmConversations(conversations);
                 setUnreadCounts((prev) => {
                     const next = { ...prev };
-                    const nextLast = { ...lastRef.current };
+                    const nextLast = { ...lastDmAtRef.current };
                     for (const conv of conversations) {
                         const uid = conv?.user?.id;
                         if (!uid || !conv?.last_at) continue;
@@ -127,9 +150,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         }
                         if (nextLast[uid] !== last && activeDmId !== uid) {
                             next[uid] = Math.min((next[uid] || 0) + 1, 999);
-                            const toastId = `${uid}-${Date.now()}`;
-                            setToasts((t) => [...t, { id: toastId, userId: uid, route: `/chat/dms/${uid}`, title: conv.user.nickname, body: conv.last_message || "New message" }]);
-                            setTimeout(() => setToasts((t) => t.filter((x) => x.id !== toastId)), 4200);
+                            const dedupeKey = `${uid}:${last}`;
+                            if (!notifiedRef.current[dedupeKey]) {
+                                notifiedRef.current[dedupeKey] = Date.now();
+                                const toastId = `${uid}-${Date.now()}`;
+                                setToasts((t) => [...t, { id: toastId, userId: uid, route: `/chat/dms/${uid}`, title: conv.user.nickname, body: conv.last_message || "New message" }]);
+                                setTimeout(() => setToasts((t) => t.filter((x) => x.id !== toastId)), 4200);
+                                playNotificationTone();
+                            }
                             if (typeof document !== "undefined" && document.hidden && "Notification" in window && Notification.permission === "granted") {
                                 try {
                                     new Notification(conv.user.nickname, { body: conv.last_message || "New message" });
@@ -138,8 +166,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
                         }
                         nextLast[uid] = last;
                     }
-                    lastRef.current = nextLast;
-                    setLastDmAt(nextLast);
+                    lastDmAtRef.current = nextLast;
                     return next;
                 });
             } catch {}
@@ -226,8 +253,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     };
 
     const friendMap = useMemo(() => new Map(friends.map((f) => [f.id, f])), [friends]);
-    const conversationMap = useMemo(() => new Map(dmConversations.map((c) => [c.user?.id, c])), [dmConversations]);
-
     const deleteDmConversation = async (otherUserId: number) => {
         if (!confirm("Are you sure you want to delete this chat?")) return;
         try {
