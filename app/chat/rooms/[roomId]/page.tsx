@@ -212,7 +212,7 @@ export default function RoomChatPage() {
     if (!room) return <div style={s.center}>{loadError || "Room not found"}</div>;
 
     const shareCopy = async () => {
-        const link = `${window.location.origin}/chat/rooms/${room.id}`;
+        const link = `${window.location.origin}/rooms/${room.id}`;
         await navigator.clipboard.writeText(link);
         setCopied(true);
         setTimeout(() => setCopied(false), 1400);
