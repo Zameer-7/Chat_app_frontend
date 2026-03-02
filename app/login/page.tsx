@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Mail, Lock, ArrowRight } from "lucide-react";
+import { Mail, Lock } from "lucide-react";
 import NovaChatMark from "@/components/NovaChatMark";
 
 export default function LoginPage() {
@@ -39,7 +39,7 @@ export default function LoginPage() {
                 </div>
 
                 <h2 style={styles.title}>Welcome back</h2>
-                <p style={styles.subtitle}>We're so excited to see you again!</p>
+                <p style={styles.subtitle}>We&apos;re so excited to see you again!</p>
 
                 <form onSubmit={handleSubmit} style={styles.form}>
                     <div style={styles.field}>
@@ -52,6 +52,8 @@ export default function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="you@example.com"
+                                autoComplete="email"
+                                inputMode="email"
                                 required
                             />
                         </div>
@@ -66,7 +68,8 @@ export default function LoginPage() {
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
+                                placeholder="********"
+                                autoComplete="current-password"
                                 required
                             />
                         </div>
@@ -96,29 +99,30 @@ export default function LoginPage() {
 
 const styles: Record<string, React.CSSProperties> = {
     page: {
-        minHeight: "100vh",
+        minHeight: "100dvh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "2rem",
+        padding: "clamp(0.9rem, 3vw, 2rem)",
         background: "#0f1117",
-        backgroundImage: "radial-gradient(circle at top right, #1d1e26, #0f1117)"
+        backgroundImage: "radial-gradient(circle at top right, #1d1e26, #0f1117)",
+        overflowX: "hidden",
     },
     card: {
         background: "#161922",
         border: "1px solid #2d313e",
         borderRadius: 20,
-        padding: "3.5rem 2.5rem",
+        padding: "clamp(1.2rem, 4vw, 2.4rem)",
         width: "100%",
         maxWidth: 440,
-        boxShadow: "0 32px 64px -16px rgba(0,0,0,0.6)"
+        boxShadow: "0 32px 64px -16px rgba(0,0,0,0.6)",
     },
     logo: {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         gap: 12,
-        marginBottom: "2rem"
+        marginBottom: "2rem",
     },
     logoIcon: {
         width: 56,
@@ -128,12 +132,12 @@ const styles: Record<string, React.CSSProperties> = {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        boxShadow: "none"
+        boxShadow: "none",
     },
     appName: { fontSize: "1.6rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" },
-    title: { fontSize: "1.75rem", fontWeight: 800, textAlign: "center", marginBottom: "0.5rem", color: "#fff" },
-    subtitle: { color: "#9ca3af", textAlign: "center", marginBottom: "2.5rem", fontSize: "0.95rem" },
-    form: { display: "flex", flexDirection: "column", gap: "1.5rem" },
+    title: { fontSize: "clamp(1.35rem, 4vw, 1.75rem)", fontWeight: 800, textAlign: "center", marginBottom: "0.5rem", color: "#fff" },
+    subtitle: { color: "#9ca3af", textAlign: "center", marginBottom: "clamp(1.2rem, 4vw, 2.2rem)", fontSize: "clamp(0.85rem, 2.7vw, 0.95rem)" },
+    form: { display: "flex", flexDirection: "column", gap: "clamp(0.95rem, 3vw, 1.5rem)" },
     field: { display: "flex", flexDirection: "column", gap: "0.6rem" },
     label: { fontSize: "0.85rem", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" },
     inputWrap: { position: "relative", display: "flex", alignItems: "center" },
@@ -142,10 +146,10 @@ const styles: Record<string, React.CSSProperties> = {
         width: "100%",
         background: "#0f1117",
         border: "1px solid #2d313e",
-        padding: "1rem 1rem 1rem 3.5rem",
+        padding: "0.95rem 1rem 0.95rem 3.1rem",
         borderRadius: 12,
         color: "#fff",
-        fontSize: "1rem",
+        fontSize: "clamp(0.95rem, 2.8vw, 1rem)",
         outline: "none",
         transition: "border-color 0.2s, box-shadow 0.2s",
     },
@@ -157,21 +161,22 @@ const styles: Record<string, React.CSSProperties> = {
         borderRadius: 10,
         fontSize: "0.875rem",
         border: "1px solid rgba(239, 68, 68, 0.2)",
-        textAlign: "center"
+        textAlign: "center",
     },
     submitBtn: {
         width: "100%",
-        padding: "1rem",
+        padding: "0.95rem 1rem",
         height: "auto",
         background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
         border: "none",
         borderRadius: 12,
         color: "#fff",
-        fontSize: "1rem",
+        fontSize: "clamp(0.95rem, 2.8vw, 1rem)",
         fontWeight: 700,
         cursor: "pointer",
         boxShadow: "0 10px 20px -10px rgba(99, 102, 241, 0.5)",
-        marginTop: "0.5rem"
+        marginTop: "0.5rem",
+        minHeight: 46,
     },
     footer: { textAlign: "center", marginTop: "1rem", fontSize: "0.9rem", color: "#9ca3af" },
     link: { color: "#818cf8", fontWeight: 600, textDecoration: "none" },

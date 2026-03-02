@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { usePathname } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://chat-app-backend-kmr3.onrender.com";
 const API_URLS = Array.from(new Set([API_URL, "https://chat-app-backend-kmr3.onrender.com"]));
@@ -22,16 +23,16 @@ function getApiErrorMessage(err: unknown, fallback: string): string {
     return fallback;
 }
 
-async function postWithRetry(path: string, payload: unknown, retries = 2) {
+async function postWithRetry(path: string, payload: unknown, retries = 1) {
     let lastErr: unknown;
     for (const base of API_URLS) {
         for (let i = 0; i <= retries; i++) {
             try {
-                return await axios.post(`${base}${path}`, payload, { timeout: 60000 });
+                return await axios.post(`${base}${path}`, payload, { timeout: 15000 });
             } catch (err) {
                 lastErr = err;
                 if (i < retries) {
-                    await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+                    await new Promise((r) => setTimeout(r, 700 * (i + 1)));
                 }
             }
         }
@@ -44,7 +45,7 @@ async function getWithFallback(path: string, token?: string) {
     for (const base of API_URLS) {
         try {
             return await axios.get(`${base}${path}`, {
-                timeout: 60000,
+                timeout: 15000,
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             });
         } catch (err) {
@@ -59,7 +60,7 @@ async function patchWithFallback(path: string, payload: unknown, token?: string)
     for (const base of API_URLS) {
         try {
             return await axios.patch(`${base}${path}`, payload, {
-                timeout: 60000,
+                timeout: 15000,
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             });
         } catch (err) {
@@ -96,6 +97,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname();
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -116,6 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
+    const isPublicRoute = pathname === "/login" || pathname === "/signup";
+
     useEffect(() => {
         const closedAtRaw = localStorage.getItem(CLOSED_AT_KEY);
         if (closedAtRaw) {
@@ -128,11 +132,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = localStorage.getItem("token");
         if (stored) {
             setToken(stored);
+            if (isPublicRoute) {
+                setLoading(false);
+                return;
+            }
             fetchMe(stored).finally(() => setLoading(false));
         } else {
             setLoading(false);
         }
-    }, [fetchMe]);
+    }, [fetchMe, isPublicRoute]);
+
+    useEffect(() => {
+        if (loading || isPublicRoute || !token || user) return;
+        setLoading(true);
+        fetchMe(token).finally(() => setLoading(false));
+    }, [fetchMe, isPublicRoute, loading, token, user]);
 
     useEffect(() => {
         const markClosed = () => {
